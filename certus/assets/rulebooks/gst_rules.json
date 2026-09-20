@@ -1,0 +1,33 @@
+{
+  "rulebook": "gst_rules", "version": "0.1.0",
+  "source": "CGST Act & Rules, LMPC Rules",
+  "rules": [
+    { "id": "G-01", "applies_to": "invoice", "severity": "warn",
+      "when": { "op": "equals", "field": "doc_title", "value": "Bill of Supply" },
+      "check": { "op": "not", "item": { "op": "exists", "field": "total_tax" } },
+      "message_key": "g01_bill_of_supply_tax", "cite": "CGST Act" },
+    { "id": "G-03", "applies_to": "invoice", "severity": "fail",
+      "when": { "op": "exists", "field": "supplier_gstin" },
+      "check": { "op": "validator", "name": "gstin_format", "field": "supplier_gstin" },
+      "message_key": "g03_gstin_format", "cite": "GSTIN structure" },
+    { "id": "G-04", "applies_to": "invoice", "severity": "fail",
+      "when": { "op": "exists", "field": "supplier_gstin" },
+      "check": { "op": "validator", "name": "gstin_checksum", "field": "supplier_gstin" },
+      "message_key": "g04_gstin_checksum", "cite": "GSTIN structure" },
+    { "id": "G-05", "applies_to": "invoice", "severity": "warn",
+      "when": { "op": "exists", "field": "supplier_gstin" },
+      "check": { "op": "validator", "name": "pan_entity", "field": "supplier_gstin" },
+      "message_key": "g05_pan_entity", "cite": "PAN format" },
+    { "id": "G-08", "applies_to": "invoice", "severity": "fail",
+      "when": { "op": "exists", "field": "grand_total" },
+      "check": { "op": "validator", "name": "grand_total", "field": "grand_total" },
+      "message_key": "g08_arithmetic", "cite": "arithmetic" },
+    { "id": "G-11", "applies_to": "invoice", "severity": "fail",
+      "when": { "op": "exists", "field": "mrp" },
+      "check": { "op": "lte", "field": "grand_total", "other": "mrp" },
+      "message_key": "g11_mrp_exceeded", "cite": "LMPC Rules, Rule 2(m)" },
+    { "id": "G-12", "applies_to": "invoice", "severity": "info",
+      "check": { "op": "exists", "field": "invoice_no" },
+      "message_key": "g12_invoice_no_missing", "cite": "CGST Rule 46" }
+  ]
+}

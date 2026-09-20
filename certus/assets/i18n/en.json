@@ -1,0 +1,18 @@
+{
+  "verdict_check": "Check these points",
+  "verdict_ok": "No problems found",
+  "verdict_minor": "A few minor points",
+  "verdict_unreadable": "Cannot read clearly. Please retake the photo.",
+  "p05_mrp_missing": "MRP was not found in the scans. Scan the other sides of the pack.",
+  "p10_barcode_checksum": "Barcode checksum is invalid.",
+  "p09_expired": "Product is expired based on the printed date.",
+  "g04_gstin_checksum": "This GSTIN does not pass its check digit. It may be a typing error.",
+  "g11_mrp_exceeded": "The billed price is higher than the MRP on the pack. MRP is meant to include all taxes.",
+  "footer_disclaimer": "Automated check. Not legal or tax advice.",
+  "app_name": "Certus",
+  "home_scan_product": "Scan Product",
+  "home_scan_bill": "Scan Bill",
+  "home_scan_form": "Scan Form",
+  "home_auto_detect": "Auto Detect Scan",
+  "settings_language": "Language"
+}
