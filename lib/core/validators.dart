@@ -26,7 +26,16 @@ bool isValidEan13(String s) {
   return (10 - (sum % 10)) % 10 == int.parse(s[12]);
 }
 
+/// Check if EAN-13 barcode has the GS1 India prefix (890).
+bool isGs1IndiaPrefix(String s) {
+  return isValidEan13(s) && s.startsWith('890');
+}
+
+/// FSSAI Structure: Must be exactly 14 digits.
 bool isFssaiShape(String s) => RegExp(r'^\d{14}$').hasMatch(s);
+
+/// BIS HUID Structure (Jewellery): 6-character alphanumeric.
+bool isBisHuidShape(String s) => RegExp(r'^[A-Z0-9]{6}$', caseSensitive: false).hasMatch(s.trim());
 
 const panEntityTypes = {'P','C','H','F','A','T','B','L','J','G'};
 bool panEntityOk(String gstin) =>

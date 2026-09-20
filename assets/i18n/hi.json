@@ -15,4 +15,8 @@
   "home_scan_form": "फॉर्म स्कैन करें",
   "home_auto_detect": "ऑटो-डिटेक्ट स्कैन",
   "settings_language": "भाषा"
+
+  "p10b_gs1_india_prefix": "बारकोड में 890 GS1 India प्रीफिक्स है।",
+  "p11_fssai_invalid": "खाद्य उत्पाद में मान्य 14-अंकीय FSSAI लाइसेंस नंबर नहीं है।",
+  "p14_huid_missing": "आभूषण में मान्य 6-वर्णों वाला BIS HUID कोड नहीं है।"
 }

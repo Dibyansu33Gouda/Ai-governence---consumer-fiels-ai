@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'result_screen.dart';
+import 'package:intl/intl.dart';
 
 class CaptureScreen extends StatefulWidget {
   final String documentType;
@@ -14,17 +15,30 @@ class CaptureScreen extends StatefulWidget {
 class _CaptureScreenState extends State<CaptureScreen> {
   CameraController? _controller;
   List<CameraDescription> _cameras = [];
+  String _currentTimeStamp = "";
 
   @override
   void initState() {
     super.initState();
     _initCamera();
+    _updateTimestamp();
+  }
+
+  void _updateTimestamp() {
+    setState(() {
+      _currentTimeStamp = DateFormat('yyyy-MM-dd HH:mm:ss').format(DateTime.now());
+    });
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) _updateTimestamp();
+    });
   }
 
   Future<void> _initCamera() async {
     _cameras = await availableCameras();
     if (_cameras.isNotEmpty) {
-      _controller = CameraController(_cameras[0], ResolutionPreset.max);
+      // OPTIMIZATION: ResolutionPreset.high (1080p) is faster for processing than max, preventing thermal throttling.
+      // enableAudio: false significantly speeds up camera initialization time.
+      _controller = CameraController(_cameras[0], ResolutionPreset.high, enableAudio: false);
       await _controller!.initialize();
       if (!mounted) return;
       setState(() {});
@@ -41,7 +55,8 @@ class _CaptureScreenState extends State<CaptureScreen> {
   Widget build(BuildContext context) {
     if (_controller == null || !_controller!.value.isInitialized) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFE67E22))),
       );
     }
     return Scaffold(
@@ -63,16 +78,34 @@ class _CaptureScreenState extends State<CaptureScreen> {
             width: MediaQuery.of(context).size.width * 0.85,
             height: MediaQuery.of(context).size.height * 0.6,
           ),
+          // Timestamp overlay hard-stamped on UI view
+          Positioned(
+            bottom: 120,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              color: Colors.black54,
+              child: Text(
+                'Captured: $_currentTimeStamp',
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontFamily: 'monospace'),
+              ),
+            ),
+          ),
           Positioned(
             bottom: 40,
             child: FloatingActionButton(
               backgroundColor: const Color(0xFFE67E22),
               onPressed: () async {
+                // Instantly capture frame without focus delay if not needed
                 final image = await _controller!.takePicture();
                 if (!mounted) return;
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (context) => ResultScreen(imagePath: image.path, documentType: widget.documentType)),
+                  MaterialPageRoute(builder: (context) => ResultScreen(
+                    imagePath: image.path, 
+                    documentType: widget.documentType,
+                    timestamp: _currentTimeStamp,
+                  )),
                 );
               },
               child: const Icon(Icons.camera_alt, color: Colors.white, size: 32),

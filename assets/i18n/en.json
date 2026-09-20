@@ -15,4 +15,8 @@
   "home_scan_form": "Scan Form",
   "home_auto_detect": "Auto Detect Scan",
   "settings_language": "Language"
+
+  "p10b_gs1_india_prefix": "Barcode has an 890 GS1 India prefix.",
+  "p11_fssai_invalid": "Food product missing valid 14-digit FSSAI license number.",
+  "p14_huid_missing": "Jewellery missing valid 6-character BIS HUID code."
 }

@@ -1,0 +1,34 @@
+{
+  "id": "form6", 
+  "title": "Form 6: Application for inclusion in electoral roll",
+  "issuer": "Election Commission of India", 
+  "version_date": "2026-01-01",
+  "official_url": "https://voters.eci.gov.in", 
+  "detect_keywords": ["Form 6", "electoral roll", "Election Commission"],
+  "documents_needed": [{"en": "Age proof (Birth Certificate, Class 10 Marksheet, etc.) and Address proof (Aadhaar, Passport, etc.).", "hi": "आयु प्रमाण (जन्म प्रमाण पत्र) और पता प्रमाण (आधार, पासपोर्ट)।"}],
+  "fields": [
+    {
+      "id": "applicant_name",
+      "label_patterns": ["Name of Applicant", "First Name", "Full Name"],
+      "explain": {"en": "Write your full name exactly as it appears on your ID proof.", "hi": "अपना पूरा नाम आईडी प्रूफ के अनुसार लिखें।"},
+      "write_this": {"en": "E.g., Ramesh Kumar", "hi": "उदाहरण: रमेश कुमार"},
+      "common_mistakes": [{"en": "Using nicknames or shortening the surname.", "hi": "उपनाम या सरनेम छोटा करना।"}]
+    },
+    {
+      "id": "epic_no",
+      "label_patterns": ["EPIC No", "Voter ID No"],
+      "explain": {"en": "If you already have a Voter ID card from another constituency, write the EPIC number here.", "hi": "यदि आपके पास पहले से वोटर आईडी है, तो EPIC नंबर लिखें।"},
+      "write_this": {"en": "10-digit alphanumeric code like ABC1234567", "hi": "10-अंकीय कोड"}
+    }
+  ],
+  "faq": [
+    {
+      "q_keywords": ["deadline", "when"], 
+      "a": {"en": "You can submit Form 6 anytime, but ideally before the election notification date to vote in the upcoming election.", "hi": "आप फॉर्म 6 कभी भी जमा कर सकते हैं।"}
+    },
+    {
+      "q_keywords": ["fee", "cost", "money"],
+      "a": {"en": "There is no fee for submitting Form 6. It is completely free.", "hi": "फॉर्म 6 जमा करने के लिए कोई शुल्क नहीं है।"}
+    }
+  ]
+}

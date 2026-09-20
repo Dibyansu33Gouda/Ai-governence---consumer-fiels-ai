@@ -1,0 +1,29 @@
+{
+  "rulebook": "label_rules", "version": "2026.1.0",
+  "source": "LMPC Rules 2011, FSSAI 2026 Amendments, BIS 2026",
+  "rules": [
+    { "id": "P-05", "applies_to": "label", "severity": "warn",
+      "check": { "op": "exists", "field": "mrp" },
+      "message_key": "p05_mrp_missing", "cite": "LMPC Rules 2011, Rule 6" },
+    { "id": "P-10", "applies_to": "label", "severity": "fail",
+      "when":  { "op": "exists", "field": "barcode" },
+      "check": { "op": "validator", "name": "ean13", "field": "barcode" },
+      "message_key": "p10_barcode_checksum", "cite": "GS1 Global Specifications" },
+    { "id": "P-10b", "applies_to": "label", "severity": "info",
+      "when":  { "op": "exists", "field": "barcode" },
+      "check": { "op": "validator", "name": "gs1_india", "field": "barcode" },
+      "message_key": "p10b_gs1_india_prefix", "cite": "GS1 India prefix check" },
+    { "id": "P-09a", "applies_to": "label", "severity": "fail",
+      "when":  { "op": "exists", "field": "expiry_date" },
+      "check": { "op": "gte", "field": "expiry_date", "other": "$today" },
+      "message_key": "p09_expired", "cite": "printed date check" },
+    { "id": "P-11", "applies_to": "label", "severity": "warn",
+      "when": { "op": "equals", "field": "is_food", "value": true },
+      "check": { "op": "validator", "name": "fssai_shape", "field": "fssai_number" },
+      "message_key": "p11_fssai_invalid", "cite": "FSSAI Labeling Regulations 2026" },
+    { "id": "P-14", "applies_to": "label", "severity": "warn",
+      "when": { "op": "equals", "field": "category", "value": "jewellery" },
+      "check": { "op": "validator", "name": "bis_huid", "field": "huid_code" },
+      "message_key": "p14_huid_missing", "cite": "BIS Hallmarking Regulations 2026" }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "id": "pan49a", 
+  "title": "Form 49A: Application for Allotment of PAN",
+  "issuer": "Income Tax Department", 
+  "version_date": "2026-05-01",
+  "official_url": "https://www.incometaxindia.gov.in", 
+  "detect_keywords": ["Form 49A", "Allotment of Permanent Account Number", "PAN Application"],
+  "documents_needed": [{"en": "Proof of Identity, Proof of Address, and Proof of Date of Birth (Aadhaar covers all three).", "hi": "पहचान, पता और जन्म तिथि का प्रमाण (आधार तीनों के लिए काम करता है)।"}],
+  "fields": [
+    {
+      "id": "assessing_officer_code",
+      "label_patterns": ["Assessing Officer Code", "AO Code", "Area Code"],
+      "explain": {"en": "This tells the tax department which jurisdiction you belong to based on your address.", "hi": "यह कर विभाग को बताता है कि आप किस क्षेत्र में आते हैं।"},
+      "write_this": {"en": "Check the NSDL/UTIITSL website for your specific AO Code.", "hi": "अपना एओ (AO) कोड NSDL वेबसाइट पर देखें।"}
+    },
+    {
+      "id": "aadhaar_number",
+      "label_patterns": ["Aadhaar Number", "UID"],
+      "explain": {"en": "Write your 12-digit Aadhaar number. Ensure the name matches exactly.", "hi": "अपना 12 अंकों का आधार नंबर लिखें।"},
+      "common_mistakes": [{"en": "Writing a masked Aadhaar instead of the full number.", "hi": "पूरा नंबर न लिखना।"}]
+    }
+  ],
+  "faq": [
+    {
+      "q_keywords": ["fee", "cost"], 
+      "a": {"en": "The fee for processing PAN application is Rs. 107 (including taxes) for Indian communication addresses.", "hi": "पैन आवेदन के लिए 107 रुपये शुल्क है।"}
+    }
+  ]
+}
