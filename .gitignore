@@ -35,3 +35,6 @@
 
 # Models
 models/
+
+# Environment Variables
+.env

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../core/speech_service.dart';
+import '../core/llm_service.dart';
 
 class AskScreen extends StatefulWidget {
-  const AskScreen({super.key});
+  final String contextText;
+  
+  const AskScreen({super.key, required this.contextText});
 
   @override
   State<AskScreen> createState() => _AskScreenState();
@@ -10,14 +14,27 @@ class AskScreen extends StatefulWidget {
 
 class _AskScreenState extends State<AskScreen> {
   final SpeechService _speechService = SpeechService();
+  final CertusLlmService _llmService = CertusLlmService(isOfflineMode: false);
+  
   String _recognizedText = "Tap the microphone and ask...";
   String _answerText = "";
   bool _isListening = false;
+  bool _hasMicPermission = false;
 
   @override
   void initState() {
     super.initState();
-    _speechService.init();
+    _checkPermissionsAndInit();
+  }
+  
+  Future<void> _checkPermissionsAndInit() async {
+    final status = await Permission.microphone.request();
+    if (status.isGranted) {
+      if (mounted) {
+        setState(() => _hasMicPermission = true);
+      }
+      await _speechService.init();
+    }
   }
 
   @override
@@ -27,20 +44,32 @@ class _AskScreenState extends State<AskScreen> {
   }
 
   void _toggleListening() async {
+    if (!_hasMicPermission) return;
+    
     if (_isListening) {
       await _speechService.stopListening();
       setState(() => _isListening = false);
       
-      // Mocking the LLM Answer based on speech
-      setState(() {
-        _answerText = "I found an issue with the barcode checksum according to rule P-10. This could just be a printing error.";
-      });
-      await _speechService.speak(_answerText);
+      setState(() => _answerText = "Thinking...");
+      
+      // Query LLM
+      final answer = await _llmService.answerQuestion(
+        "Answer briefly using the context.", 
+        widget.contextText, 
+        _recognizedText
+      );
+      
+      if (mounted) {
+        setState(() => _answerText = answer);
+        await _speechService.speak(_answerText);
+      }
     } else {
       await _speechService.startListening((text) {
-        setState(() {
-          _recognizedText = text;
-        });
+        if (mounted) {
+          setState(() {
+            _recognizedText = text;
+          });
+        }
       });
       setState(() => _isListening = true);
     }
@@ -48,6 +77,15 @@ class _AskScreenState extends State<AskScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hasMicPermission) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ask Certus')),
+        body: const Center(
+          child: Text("Microphone permission required to use Voice Q&A", style: TextStyle(fontSize: 16)),
+        ),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(title: const Text('Ask Certus')),
       body: Padding(
@@ -86,7 +124,7 @@ class _AskScreenState extends State<AskScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Text(_isListening ? 'Listening...' : 'Tap to speak', style: const TextStyle(fontSize: 16)),
+            Text(_isListening ? 'Listening (Tap to stop)...' : 'Tap to speak', style: const TextStyle(fontSize: 16)),
           ],
         ),
       ),
