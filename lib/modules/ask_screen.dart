@@ -20,6 +20,16 @@ class _AskScreenState extends State<AskScreen> {
   String _answerText = "";
   bool _isListening = false;
   bool _hasMicPermission = false;
+  
+  // Multi-language state
+  String _selectedLanguageCode = 'en';
+
+  final Map<String, Map<String, String>> _languageMap = {
+    'en': {'label': 'English', 'stt': 'en_IN', 'tts': 'en-IN', 'llm': 'English'},
+    'hi': {'label': 'हिंदी (Hindi)', 'stt': 'hi_IN', 'tts': 'hi-IN', 'llm': 'Hindi'},
+    'or': {'label': 'ଓଡ଼ିଆ (Odia)', 'stt': 'or_IN', 'tts': 'or-IN', 'llm': 'Odia'},
+    'te': {'label': 'తెలుగు (Telugu)', 'stt': 'te_IN', 'tts': 'te-IN', 'llm': 'Telugu'},
+  };
 
   @override
   void initState() {
@@ -46,22 +56,25 @@ class _AskScreenState extends State<AskScreen> {
   void _toggleListening() async {
     if (!_hasMicPermission) return;
     
+    final currentLang = _languageMap[_selectedLanguageCode]!;
+    
     if (_isListening) {
       await _speechService.stopListening();
       setState(() => _isListening = false);
       
-      setState(() => _answerText = "Thinking...");
+      setState(() => _answerText = "Thinking in \...");
       
-      // Query LLM
+      // Query LLM with explicit translation/language instructions
       final answer = await _llmService.answerQuestion(
         "Answer briefly using the context.", 
         widget.contextText, 
-        _recognizedText
+        _recognizedText,
+        targetLanguage: currentLang['llm']!
       );
       
       if (mounted) {
         setState(() => _answerText = answer);
-        await _speechService.speak(_answerText);
+        await _speechService.speak(_answerText, languageCode: currentLang['tts']!);
       }
     } else {
       await _speechService.startListening((text) {
@@ -70,7 +83,8 @@ class _AskScreenState extends State<AskScreen> {
             _recognizedText = text;
           });
         }
-      });
+      }, localeId: currentLang['stt']!);
+      
       setState(() => _isListening = true);
     }
   }
@@ -87,7 +101,34 @@ class _AskScreenState extends State<AskScreen> {
     }
     
     return Scaffold(
-      appBar: AppBar(title: const Text('Ask Certus')),
+      appBar: AppBar(
+        title: const Text('Ask Certus'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: DropdownButton<String>(
+              value: _selectedLanguageCode,
+              dropdownColor: Colors.white,
+              underline: const SizedBox(),
+              icon: const Icon(Icons.language, color: Colors.black87),
+              items: _languageMap.keys.map((String code) {
+                return DropdownMenuItem<String>(
+                  value: code,
+                  child: Text(_languageMap[code]!['label']!, style: const TextStyle(fontSize: 14)),
+                );
+              }).toList(),
+              onChanged: (String? newValue) {
+                if (newValue != null) {
+                  setState(() {
+                    _selectedLanguageCode = newValue;
+                    _recognizedText = "Language switched to \";
+                  });
+                }
+              },
+            ),
+          )
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -100,17 +141,19 @@ class _AskScreenState extends State<AskScreen> {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFE0E0E0)),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('You asked:', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                    const SizedBox(height: 8),
-                    Text(_recognizedText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                    const Divider(height: 32),
-                    Text('Certus:', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                    const SizedBox(height: 8),
-                    Text(_answerText, style: const TextStyle(fontSize: 18, color: Color(0xFF2C3E50))),
-                  ],
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('You asked:', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                      const SizedBox(height: 8),
+                      Text(_recognizedText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                      const Divider(height: 32),
+                      Text('Certus:', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                      const SizedBox(height: 8),
+                      Text(_answerText, style: const TextStyle(fontSize: 18, color: const Color(0xFF2C3E50))),
+                    ],
+                  ),
                 ),
               ),
             ),

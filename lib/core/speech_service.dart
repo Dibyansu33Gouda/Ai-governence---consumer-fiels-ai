@@ -7,20 +7,18 @@ class SpeechService {
   bool _isSpeechEnabled = false;
 
   Future<void> init() async {
-    // Optimizing microphone initialization
     _isSpeechEnabled = await _speechToText.initialize(
       onError: (e) => print("Speech Error: $e"),
       onStatus: (s) => print("Speech Status: $s"),
     );
-    // Use local high-quality voice, disable network for speed
-    await _flutterTts.setLanguage("en-IN"); 
     await _flutterTts.setSpeechRate(0.5);
-    // OPTIMIZATION: Wait for completion to avoid audio overlap/cutting off
     await _flutterTts.awaitSpeakCompletion(true);
   }
 
-  Future<void> speak(String text) async {
-    // Ensures crisp, delay-free playback
+  Future<void> speak(String text, {String languageCode = 'en-IN'}) async {
+    // Attempt to set the exact language. 
+    // Fallback handling is managed natively by Android if a voice isn't installed.
+    await _flutterTts.setLanguage(languageCode);
     await _flutterTts.speak(text);
   }
   
@@ -28,20 +26,18 @@ class SpeechService {
     await _flutterTts.stop();
   }
 
-  Future<void> startListening(Function(String) onResult) async {
+  Future<void> startListening(Function(String) onResult, {String localeId = 'en_IN'}) async {
     if (_isSpeechEnabled) {
-      // OPTIMIZATION: partialResults = false to avoid UI jitter and processing delays.
-      // listenFor limits recording length for faster response.
       await _speechToText.listen(
         onResult: (result) {
           if (result.finalResult) {
             onResult(result.recognizedWords);
           }
         },
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 2),
+        listenFor: const Duration(seconds: 15), // Increased for longer translations
+        pauseFor: const Duration(seconds: 3),
         partialResults: false,
-        localeId: "en_IN",
+        localeId: localeId, // dynamically inject the language to listen for
       );
     }
   }
