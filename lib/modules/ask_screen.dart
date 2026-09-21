@@ -16,19 +16,19 @@ class _AskScreenState extends State<AskScreen> {
   final SpeechService _speechService = SpeechService();
   final CertusLlmService _llmService = CertusLlmService(isOfflineMode: false);
   
-  String _recognizedText = "Tap the microphone and ask...";
+  String _recognizedText = "Awaiting audio input...";
   String _answerText = "";
   bool _isListening = false;
+bool _isProcessingLLM = false;
   bool _hasMicPermission = false;
   
-  // Multi-language state
   String _selectedLanguageCode = 'en';
 
   final Map<String, Map<String, String>> _languageMap = {
-    'en': {'label': 'English', 'stt': 'en_IN', 'tts': 'en-IN', 'llm': 'English'},
-    'hi': {'label': 'हिंदी (Hindi)', 'stt': 'hi_IN', 'tts': 'hi-IN', 'llm': 'Hindi'},
-    'or': {'label': 'ଓଡ଼ିଆ (Odia)', 'stt': 'or_IN', 'tts': 'or-IN', 'llm': 'Odia'},
-    'te': {'label': 'తెలుగు (Telugu)', 'stt': 'te_IN', 'tts': 'te-IN', 'llm': 'Telugu'},
+    'en': {'label': 'ENG', 'stt': 'en_IN', 'tts': 'en-IN', 'llm': 'English'},
+    'hi': {'label': 'HIN', 'stt': 'hi_IN', 'tts': 'hi-IN', 'llm': 'Hindi'},
+    'or': {'label': 'ODI', 'stt': 'or_IN', 'tts': 'or-IN', 'llm': 'Odia'},
+    'te': {'label': 'TEL', 'stt': 'te_IN', 'tts': 'te-IN', 'llm': 'Telugu'},
   };
 
   @override
@@ -54,7 +54,7 @@ class _AskScreenState extends State<AskScreen> {
   }
 
   void _toggleListening() async {
-    if (!_hasMicPermission) return;
+    if (!_hasMicPermission || _isProcessingLLM) return;
     
     final currentLang = _languageMap[_selectedLanguageCode]!;
     
@@ -62,18 +62,17 @@ class _AskScreenState extends State<AskScreen> {
       await _speechService.stopListening();
       setState(() => _isListening = false);
       
-      setState(() => _answerText = "Thinking in \...");
+      setState(() { _answerText = "PROCESSING IN ${currentLang['llm']}..."; _isProcessingLLM = true; });
       
-      // Query LLM with explicit translation/language instructions
       final answer = await _llmService.answerQuestion(
-        "Answer briefly using the context.", 
+        "Answer briefly using the context. Keep it direct.", 
         widget.contextText, 
         _recognizedText,
         targetLanguage: currentLang['llm']!
       );
       
       if (mounted) {
-        setState(() => _answerText = answer);
+        setState(() { _answerText = answer; _isProcessingLLM = false; });
         await _speechService.speak(_answerText, languageCode: currentLang['tts']!);
       }
     } else {
@@ -93,35 +92,36 @@ class _AskScreenState extends State<AskScreen> {
   Widget build(BuildContext context) {
     if (!_hasMicPermission) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Ask Certus')),
+        appBar: AppBar(title: const Text('VOICE COMMS')),
         body: const Center(
-          child: Text("Microphone permission required to use Voice Q&A", style: TextStyle(fontSize: 16)),
+          child: Text("MIC PERMISSION DENIED", style: TextStyle(color: Color(0xFFFF3333), fontWeight: FontWeight.bold, letterSpacing: 1.0)),
         ),
       );
     }
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ask Certus'),
+        title: const Text('VOICE COMMS'),
         actions: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: DropdownButton<String>(
               value: _selectedLanguageCode,
-              dropdownColor: Colors.white,
+              dropdownColor: const Color(0xFF141414),
               underline: const SizedBox(),
-              icon: const Icon(Icons.language, color: Colors.black87),
+              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFFFFD600)),
+              style: const TextStyle(color: Color(0xFFFFD600), fontWeight: FontWeight.bold, fontFamily: 'monospace'),
               items: _languageMap.keys.map((String code) {
                 return DropdownMenuItem<String>(
                   value: code,
-                  child: Text(_languageMap[code]!['label']!, style: const TextStyle(fontSize: 14)),
+                  child: Text(_languageMap[code]!['label']!),
                 );
               }).toList(),
               onChanged: (String? newValue) {
                 if (newValue != null) {
                   setState(() {
                     _selectedLanguageCode = newValue;
-                    _recognizedText = "Language switched to \";
+                    _recognizedText = "SYS_LANG_SWITCHED: ${_languageMap[newValue]!['label']}";
                   });
                 }
               },
@@ -135,42 +135,59 @@ class _AskScreenState extends State<AskScreen> {
           children: [
             Expanded(
               child: Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE0E0E0)),
+                  color: const Color(0xFF0A0A0A),
+                  border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+                  borderRadius: BorderRadius.circular(2),
                 ),
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('You asked:', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                      const Text('> USER_INPUT', style: TextStyle(color: Color(0xFFFFD600), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0, fontFamily: 'monospace')),
                       const SizedBox(height: 8),
-                      Text(_recognizedText, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                      const Divider(height: 32),
-                      Text('Certus:', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+                      Text(_recognizedText, style: const TextStyle(fontSize: 18, color: Colors.white, height: 1.4)),
+                      const Divider(height: 40, color: Color(0xFF2A2A2A)),
+                      const Text('> SYS_RESPONSE', style: TextStyle(color: Color(0xFFFFD600), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0, fontFamily: 'monospace')),
                       const SizedBox(height: 8),
-                      Text(_answerText, style: const TextStyle(fontSize: 18, color: const Color(0xFF2C3E50))),
+                      Text(_answerText, style: const TextStyle(fontSize: 18, color: Colors.white70, height: 1.4)),
                     ],
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             GestureDetector(
               onTap: _toggleListening,
-              child: CircleAvatar(
-                radius: 40,
-                backgroundColor: _isListening ? const Color(0xFFC0392B) : const Color(0xFFE67E22),
-                child: Icon(_isListening ? Icons.stop : Icons.mic, size: 40, color: Colors.white),
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: _isProcessingLLM ? Colors.grey : (_isListening ? const Color(0xFFFF3333) : const Color(0xFFFFD600)),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Icon(
+                  _isListening ? Icons.stop : Icons.mic, 
+                  size: 40, 
+                  color: _isListening ? Colors.white : Colors.black
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            Text(_isListening ? 'Listening (Tap to stop)...' : 'Tap to speak', style: const TextStyle(fontSize: 16)),
+            Text(
+              _isListening ? 'RECORDING... [TAP TO STOP]' : '[TAP TO SPEAK]', 
+              style: TextStyle(
+                fontSize: 12, 
+                fontWeight: FontWeight.bold, 
+                letterSpacing: 2.0, 
+                color: _isListening ? const Color(0xFFFF3333) : const Color(0xFFFFD600)
+              )
+            ),
           ],
         ),
       ),
     );
   }
 }
+

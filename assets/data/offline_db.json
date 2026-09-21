@@ -1,0 +1,39 @@
+{
+  "products": {
+    "8901058863870": "Maggi 2-Minute Noodles",
+    "8901764012273": "Parle-G Gold Biscuits",
+    "89015887": "Sprite Soft Drink",
+    "8901588712345": "Sprite Soft Drink 750ml",
+    "8901030911031": "Horlicks Classic Malt",
+    "8901030911116": "Horlicks Chocolate",
+    "8901030911000": "Horlicks Health Drink",
+    "8901491101514": "Lays Classic Salted",
+    "8901262010041": "Amul Butter",
+    "8902519002237": "Dabur Honey",
+    "8901207040409": "Tata Salt",
+    "8904000900388": "Britannia Good Day",
+    "8901058000000": "Nestle KitKat",
+    "8901764692017": "Carbonated Water (Sprite/Kinley)",
+    "8901396354604": "Unregistered Beverage",
+    "8904006307656": "Premium Perfume (User Demo)",
+    "8901088200066": "Livon Hair Serum (Anti-Frizz)",
+    "8901248226189": "Mentho Plus Balm"
+  },
+  "gstins": {
+    "27AADCB2230M1Z2": "Reliance Retail Ltd",
+    "29GGGGG1314R9Z6": "Flipkart India Pvt Ltd",
+    "27AAACA5163E1Z4": "Amazon Seller Services",
+    "07AABCT4321P1Z9": "Haldiram Snacks Pvt Ltd",
+    "27AAACT2727Q1Z5": "Tata Consumer Products",
+    "06AAACZ7003F1Z9": "Zomato Ltd",
+    "29AAACS6351S1Z4": "Swiggy (Bundl Technologies)"
+  },
+  "forms": {
+    "ABCDE1234F": "Govt of India PAN Registry",
+    "123456789012": "UIDAI Aadhaar Registry",
+    "DL-1420110012345": "Vahan Parivahan DL Registry",
+    "ABCDE9876Z": "Govt of India PAN Registry"
+  }
+}
+
+

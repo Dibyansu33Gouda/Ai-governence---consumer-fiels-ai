@@ -38,3 +38,6 @@ models/
 
 # Environment Variables
 .env
+
+*.zip
+*.apk

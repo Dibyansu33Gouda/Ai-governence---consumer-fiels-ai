@@ -4,8 +4,9 @@ class Finding {
   final String ruleId, messageKey, cite, rulebookVersion;
   final Severity severity;
   final Map<String, String> args;
+  final bool passed;
   Finding(this.ruleId, this.severity, this.messageKey, this.cite,
-      this.rulebookVersion, this.args);
+      this.rulebookVersion, this.args, {this.passed = false});
 }
 
 typedef Validator = bool Function(Map<String, dynamic> doc, Map<String, dynamic> node);
@@ -18,11 +19,20 @@ class RuleEngine {
     final out = <Finding>[];
     for (final r in (book['rules'] as List).cast<Map<String, dynamic>>()) {
       if (r['applies_to'] != docType) continue;
+      
       final when = r['when'] as Map<String, dynamic>?;
-      if (when != null && !_eval(when, doc)) continue;
-      if (_eval(r['check'] as Map<String, dynamic>, doc)) continue;
-      out.add(Finding(r['id'], Severity.values.byName(r['severity']),
-          r['message_key'], r['cite'] ?? '', book['version'], _args(r, doc)));
+      if (when != null && !_eval(when, doc)) {
+         // Not applicable
+         continue;
+      }
+      
+      bool didPass = _eval(r['check'] as Map<String, dynamic>, doc);
+      
+      if (didPass) {
+         out.add(Finding(r['id'], Severity.info, r['message_key'], r['cite'] ?? '', book['version'], _args(r, doc), passed: true));
+      } else {
+         out.add(Finding(r['id'], Severity.values.byName(r['severity']), r['message_key'], r['cite'] ?? '', book['version'], _args(r, doc), passed: false));
+      }
     }
     return out;
   }

@@ -10,9 +10,8 @@ class OcrResult {
 }
 
 class OcrService {
-  // Using Devanagari script for EN + HI support
-  final textRecognizer = TextRecognizer(script: TextRecognitionScript.devanagiri);
-  final barcodeScanner = BarcodeScanner();
+  final textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+  final barcodeScanner = BarcodeScanner(formats: [BarcodeFormat.all]);
 
   Future<OcrResult> processImage(File imageFile) async {
     final inputImage = InputImage.fromFile(imageFile);
@@ -27,6 +26,8 @@ class OcrService {
     for (Barcode barcode in barcodesList) {
       if (barcode.rawValue != null) {
         foundBarcodes.add(barcode.rawValue!);
+        // Inject explicitly so the LLM and the Debug View see the true scanner output!
+        fullText += "\n\n[SYSTEM_BARCODE_SCANNER_DETECTED: ${barcode.rawValue}]\n";
       }
     }
     

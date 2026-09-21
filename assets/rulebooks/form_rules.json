@@ -1,0 +1,21 @@
+{
+  "applies_to": "form",
+  "rules": [
+    {
+      "id": "f01_id_missing",
+      "field": "document_id",
+      "check": "exists",
+      "severity": "fail",
+      "message": "f01_id_missing",
+      "cite": "Standard KYC Requirements"
+    },
+    {
+      "id": "f02_name_missing",
+      "field": "name",
+      "check": "exists",
+      "severity": "warn",
+      "message": "f02_name_missing",
+      "cite": "Standard KYC Requirements"
+    }
+  ]
+}
