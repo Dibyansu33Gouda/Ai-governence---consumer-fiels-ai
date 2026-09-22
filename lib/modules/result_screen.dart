@@ -155,6 +155,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   if (json['status'] == 1 && json['product'] != null) {
                     final product = json['product'];
                     _productName = product['product_name'] ?? product['product_name_en'] ?? product['generic_name'];
+                    _brandName = product['brands'] ?? product['brand'];
                     _productImageUrl = product['image_front_small_url'] ?? product['image_front_url'];
                     _sourceUrl = 'https://$domain/product/$_identifierCode';
                     _extractedData['source_url'] = _sourceUrl;
@@ -179,6 +180,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   if (json2['code'] == 'OK' && (json2['items'] as List).isNotEmpty) {
                     final product = json2['items'][0];
                     _productName = product['title'];
+                    _brandName = product['brand'];
                     if ((product['images'] as List).isNotEmpty) {
                       _productImageUrl = product['images'][0];
                     }
@@ -201,18 +203,20 @@ class _ResultScreenState extends State<ResultScreen> {
                 scannedCode: _identifierCode ?? 'Packaged Goods',
                 ocrText: _ocrText.isNotEmpty ? _ocrText : (_productName ?? 'Product scan'),
                 resolvedUrl: resolvedUrl,
+                knownProductName: _productName,
+                knownBrand: _brandName,
               );
 
               if (aiProduct != null) {
                 _productName ??= aiProduct['product_name'];
                 _productDescription ??= aiProduct['description'];
-                _brandName = aiProduct['brand'];
-                _categoryName = aiProduct['category'];
+                _brandName ??= aiProduct['brand'];
+                _categoryName ??= aiProduct['category'];
                 _sourceUrl ??= aiProduct['official_url'];
                 _extractedData['source_url'] = _sourceUrl;
                 
-                if (aiProduct['brand'] != null) _extractedData['brand'] = aiProduct['brand'];
-                if (aiProduct['category'] != null) _extractedData['category'] = aiProduct['category'];
+                if (_brandName != null) _extractedData['brand'] = _brandName;
+                if (_categoryName != null) _extractedData['category'] = _categoryName;
                 if (_extractedData['mrp'] == null && aiProduct['mrp'] != null) _extractedData['mrp'] = aiProduct['mrp'];
                 if (_extractedData['fssai_number'] == null && aiProduct['fssai_number'] != null) _extractedData['fssai_number'] = aiProduct['fssai_number'];
                 _isOfficialBrandMatch = true;
@@ -753,6 +757,20 @@ class _ResultScreenState extends State<ResultScreen> {
                   ],
 
                   const SizedBox(height: 20),
+                  if (widget.documentType == 'form') ...[
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.assignment_turned_in, color: Colors.black, size: 20),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00FF66),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      onPressed: () => _showFormFillingGuidance(context),
+                      label: const Text('VIEW FORM FILLING GUIDE & SUGGESTIONS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.0, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   ElevatedButton(
                     onPressed: () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => AskScreen(contextText: _ocrText)));
@@ -775,6 +793,215 @@ class _ResultScreenState extends State<ResultScreen> {
               ),
             ),
           ),
+    );
+  }
+
+  void _showFormFillingGuidance(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0E0E0E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        side: BorderSide(color: Color(0xFF00FF66), width: 1.5),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.85,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (sheetContext, scrollController) {
+            return FutureBuilder<Map<String, dynamic>?>(
+              future: CertusLlmService(isOfflineMode: false).generateFormFillingGuidance(
+                documentTitle: _productName ?? 'Government Form',
+                ocrText: _ocrText,
+              ),
+              builder: (fContext, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: Color(0xFF00FF66)),
+                        SizedBox(height: 16),
+                        Text(
+                          "FETCHING OFFICIAL STATUTORY FORM GUIDELINES...", 
+                          style: TextStyle(color: Color(0xFF00FF66), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1.0, fontFamily: 'monospace')
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                final guide = snapshot.data;
+                if (guide == null) {
+                  return Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.info_outline, color: Color(0xFFFFD600), size: 48),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Could not retrieve online guidance. Ensure your device has an active internet connection.", 
+                          textAlign: TextAlign.center, 
+                          style: TextStyle(color: Colors.white70)
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            Navigator.push(context, MaterialPageRoute(builder: (c) => AskScreen(
+                              contextText: _ocrText, 
+                              initialQuestion: "How do I fill this government form without errors?"
+                            )));
+                          },
+                          child: const Text("ASK AI ASSISTANT DIRECTLY"),
+                        )
+                      ],
+                    ),
+                  );
+                }
+
+                final steps = (guide['key_steps'] as List?)?.cast<String>() ?? [];
+                final docs = (guide['documents_required'] as List?)?.cast<String>() ?? [];
+                final mistakes = (guide['common_mistakes_to_avoid'] as List?)?.cast<String>() ?? [];
+
+                return ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20),
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.verified, color: Color(0xFF00FF66), size: 18),
+                            const SizedBox(width: 8),
+                            Text(
+                              "> CITIZEN FORM FILLING ASSISTANCE".toUpperCase(),
+                              style: const TextStyle(color: Color(0xFF00FF66), fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontFamily: 'monospace'),
+                            ),
+                          ],
+                        ),
+                        IconButton(icon: const Icon(Icons.close, color: Colors.white54), onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      guide['form_name'] ?? (_productName ?? 'Government Form'),
+                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
+                    ),
+                    if (guide['submission_portal'] != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.public, color: Color(0xFFFFD600), size: 14),
+                          const SizedBox(width: 6),
+                          const Text("OFFICIAL PORTAL: ", style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                          Expanded(child: Text("${guide['submission_portal']}", style: const TextStyle(color: Color(0xFFFFD600), fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace'), overflow: TextOverflow.ellipsis)),
+                        ],
+                      ),
+                    ],
+                    const Divider(height: 32, color: Color(0xFF222222)),
+
+                    // Key Steps
+                    if (steps.isNotEmpty) ...[
+                      const Text("1. STEP-BY-STEP FILLING INSTRUCTIONS:", style: TextStyle(color: Color(0xFFFFD600), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
+                      const SizedBox(height: 10),
+                      ...steps.map((s) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.arrow_right, color: Color(0xFFFFD600), size: 18),
+                            const SizedBox(width: 6),
+                            Expanded(child: Text(s, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4))),
+                          ],
+                        ),
+                      )),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Documents Required
+                    if (docs.isNotEmpty) ...[
+                      const Text("2. MANDATORY DOCUMENTS TO ATTACH:", style: TextStyle(color: Color(0xFF00FF66), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
+                      const SizedBox(height: 10),
+                      ...docs.map((d) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.check_circle_outline, color: Color(0xFF00FF66), size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(d, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4))),
+                          ],
+                        ),
+                      )),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Common Mistakes to Avoid
+                    if (mistakes.isNotEmpty) ...[
+                      const Text("3. COMMON REJECTION PITFALLS TO AVOID:", style: TextStyle(color: Color(0xFFFF3333), fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.0)),
+                      const SizedBox(height: 10),
+                      ...mistakes.map((m) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF3333), size: 16),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(m, style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4))),
+                          ],
+                        ),
+                      )),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Fees & Timeline
+                    if (guide['estimated_timeline_fee'] != null) ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: const Color(0xFF141414), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.white12)),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.schedule, color: Colors.white54, size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(child: Text("${guide['estimated_timeline_fee']}", style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // Ask AI Comms Button
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.mic, color: Colors.black),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFFD600),
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(context, MaterialPageRoute(builder: (c) => AskScreen(
+                          contextText: "${_ocrText}\n\nOfficial Guidance:\n${guide.toString()}",
+                          initialQuestion: "How do I fill this government form without errors?",
+                        )));
+                      },
+                      label: const Text("HAVE QUESTIONS? ASK VOICE / KEYBOARD AI", style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.0, fontSize: 13)),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }

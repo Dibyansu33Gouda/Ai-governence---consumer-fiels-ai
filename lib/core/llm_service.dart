@@ -72,6 +72,8 @@ $documentText
     required String scannedCode,
     required String ocrText,
     String? resolvedUrl,
+    String? knownProductName,
+    String? knownBrand,
   }) async {
     if (isOfflineMode || _activeEngine == "NONE") return null;
 
@@ -79,18 +81,22 @@ $documentText
 You are an expert consumer product verifier and auditor.
 Analyze the following packaging scan and scanned barcode / QR code to identify the exact product, brand, authenticity, and legal details.
 
+${knownProductName != null ? "CONFIRMED PRODUCT IDENTITY FROM GLOBAL REGISTRY: '$knownProductName'" : ""}
+${knownBrand != null ? "CONFIRMED BRAND FROM GLOBAL REGISTRY: '$knownBrand'" : ""}
 Scanned Code: $scannedCode
 Resolved Web Link: ${resolvedUrl ?? 'None'}
 Packaging Text Detected (OCR):
 $ocrText
 
+IMPORTANT: If Confirmed Product Identity or Brand is provided above, you MUST prioritize and describe that EXACT product (e.g., if Dove soap is confirmed, do NOT describe Lifebuoy or other brands from the same parent company).
+
 Return ONLY a pure JSON object (no markdown, no backticks, no preamble) with these exact keys:
 {
-  "product_name": "Full official product name including flavor/type (e.g. Amul Real Milk Vanilla Ice Cream)",
-  "brand": "Manufacturer or Brand Name (e.g. Amul / GCMMF)",
-  "category": "Specific category (e.g. Dairy & Ice Cream, Cosmetics, FMCG, Beverage)",
+  "product_name": "Full official product name including variant (e.g. Dove Cream Beauty Bathing Bar / Soap)",
+  "brand": "Manufacturer or Brand Name (e.g. Dove / Hindustan Unilever)",
+  "category": "Specific category (e.g. Personal Care / Soap, Dairy & Ice Cream, Cosmetics, FMCG, Beverage)",
   "description": "Comprehensive, highly detailed 2-3 sentence product description explaining what the product is, key quality attributes, manufacturer authenticity, and purpose.",
-  "official_url": "Real official brand website (e.g. https://amul.com)",
+  "official_url": "Real official brand website (e.g. https://dove.com or https://hul.co.in)",
   "mrp": "Extracted MRP with currency if visible in OCR or packaging text, else null",
   "expiry_date": "Extracted expiry or best before if visible in OCR, else null",
   "fssai_number": "Extracted 14-digit FSSAI number if food/beverage and visible in OCR, else null",
@@ -218,7 +224,67 @@ Return ONLY a pure JSON object (no markdown, no backticks, no preamble) with the
     }
     return null;
   }
-  
+
+  Future<Map<String, dynamic>?> generateFormFillingGuidance({
+    required String documentTitle,
+    required String ocrText,
+    String targetLanguage = 'English',
+  }) async {
+    if (isOfflineMode || _activeEngine == "NONE") return null;
+
+    final prompt = '''
+You are an expert Government Public Service and Citizen Assistance Guide in India.
+A citizen has scanned the following Government Form or KYC Document ($documentTitle) and needs precise, field-by-field guidance on how to fill it, documents required, and common pitfalls to avoid.
+
+Document Title: $documentTitle
+Scanned Form Content (OCR):
+$ocrText
+
+Provide step-by-step citizen assistance in the requested language: $targetLanguage.
+Return ONLY a pure JSON object (no markdown, no backticks, no preamble):
+{
+  "form_name": "Official Form Name & Number (e.g. Form 49A for PAN Card, Aadhaar Enrolment / Correction Form)",
+  "submission_portal": "Official government submission portal URL (e.g. https://tin.tin.nsdl.com or https://uidai.gov.in)",
+  "key_steps": [
+    "Step 1: Fill Applicant Details (Full name exactly as per birth certificate / school leaving certificate).",
+    "Step 2: Enter AO Code (Assessing Officer code derived from your state / pincode).",
+    "Step 3: Select Parent Name preference for card printing (Father or Mother).",
+    "Step 4: Attach Proof of Identity (POI) and Proof of Address (POA)."
+  ],
+  "documents_required": [
+    "Proof of Identity: Aadhaar / Voter ID / Passport",
+    "Proof of Address: Electricity Bill / Bank Statement / Rent Agreement",
+    "Proof of Date of Birth: Birth Certificate / Matriculation Marksheet"
+  ],
+  "common_mistakes_to_avoid": [
+    "Do not staple or pin the photograph (use clear glue).",
+    "Do not sign across the face; sign cleanly within the designated box.",
+    "Ensure the spelling of your name matches your identity proof exactly."
+  ],
+  "estimated_timeline_fee": "Nominal fee (Rs. 107 in India). Processing time: 7 to 15 business days."
+}
+''';
+
+    try {
+      final responseText = await _generate(prompt);
+      if (responseText != null) {
+        String cleaned = responseText.trim();
+        if (cleaned.startsWith("```json")) cleaned = cleaned.substring(7);
+        if (cleaned.startsWith("```")) cleaned = cleaned.substring(3);
+        if (cleaned.endsWith("```")) cleaned = cleaned.substring(0, cleaned.length - 3);
+        int start = cleaned.indexOf('{');
+        int end = cleaned.lastIndexOf('}');
+        if (start != -1 && end != -1 && end > start) {
+          cleaned = cleaned.substring(start, end + 1);
+        }
+        return jsonDecode(cleaned.trim());
+      }
+    } catch (e) {
+      print("LLM generateFormFillingGuidance Error: $e");
+    }
+    return null;
+  }
+
   Future<String> answerQuestion(String instruction, String contextText, String question, {String targetLanguage = 'English'}) async {
     if (isOfflineMode) {
       await Future.delayed(const Duration(seconds: 1));
