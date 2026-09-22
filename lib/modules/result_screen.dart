@@ -727,7 +727,7 @@ class _ResultScreenState extends State<ResultScreen> {
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
                     const SizedBox(height: 14),
                   ],
 
@@ -753,7 +753,7 @@ class _ResultScreenState extends State<ResultScreen> {
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
 
                   const SizedBox(height: 20),
@@ -988,7 +988,7 @@ class _ResultScreenState extends State<ResultScreen> {
                       onPressed: () {
                         Navigator.pop(ctx);
                         Navigator.push(context, MaterialPageRoute(builder: (c) => AskScreen(
-                          contextText: "${_ocrText}\n\nOfficial Guidance:\n${guide.toString()}",
+                          contextText: "$_ocrText\n\nOfficial Guidance:\n${guide.toString()}",
                           initialQuestion: "How do I fill this government form without errors?",
                         )));
                       },

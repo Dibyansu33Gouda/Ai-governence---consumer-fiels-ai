@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/core/validators.dart';
+import 'package:certus/core/validators.dart';
 
 void main() {
   group('Validators Test', () {
@@ -8,7 +8,7 @@ void main() {
       expect(isValidGstin('27AAPFU0939F1ZX'), isFalse);
       
       // additional cases
-      expect(isValidGstin('06AAAAA0000A1Z5'), isTrue);
+      expect(isValidGstin('06AAAAA0000A1Z6'), isTrue);
     });
 
     test('EAN-13 validation', () {

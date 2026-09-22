@@ -22,13 +22,13 @@ class PdfService {
               pw.Header(level: 0, child: pw.Text('Certus Evidence Report')),
               pw.Text('Date: ${DateTime.now().toIso8601String()}'),
               pw.SizedBox(height: 20),
-              pw.Text('Document Type: ${docType}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-              pw.Text('Verdict: ${verdict}', style: pw.TextStyle(color: PdfColors.red, fontSize: 18)),
+              pw.Text('Document Type: $docType', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text('Verdict: $verdict', style: const pw.TextStyle(color: PdfColors.red, fontSize: 18)),
               pw.SizedBox(height: 20),
               pw.Text('Extracted Data (PII Masked):', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ...extractedFields.entries.map((e) {
                 return pw.Text('${e.key}: ${maskAll(e.value.toString())}');
-              }).toList(),
+              }),
               pw.Spacer(),
               pw.Text('Automated check. Not legal or tax advice.', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
             ],

@@ -291,7 +291,7 @@ Return ONLY a pure JSON object (no markdown, no backticks, no preamble):
       return "Offline chat mode strictly requires C++ LiteRT integration.";
     }
     if (_activeEngine == "NONE") {
-      return "SYS_INIT_ERR: ${_initError}";
+      return "SYS_INIT_ERR: $_initError";
     }
 
     final prompt = '''
