@@ -26,18 +26,24 @@
     "8901248226189": "Emami Mentho Plus Balm (Headache Relief)"
   },
   "gstins": {
-    "27AADCB2230M1Z2": "Reliance Retail Ltd",
-    "29GGGGG1314R9Z6": "Flipkart India Pvt Ltd",
-    "27AAACA5163E1Z4": "Amazon Seller Services",
-    "07AABCT4321P1Z9": "Haldiram Snacks Pvt Ltd",
-    "27AAACT2727Q1Z5": "Tata Consumer Products",
-    "06AAACZ7003F1Z9": "Zomato Ltd",
-    "29AAACS6351S1Z4": "Swiggy (Bundl Technologies)"
+    "27AADCB2230M1Z2": "Reliance Retail Ltd (Maharashtra)",
+    "29GGGGG1314R9Z6": "Flipkart India Pvt Ltd (Karnataka)",
+    "27AAACA5163E1Z4": "Amazon Seller Services (Maharashtra)",
+    "07AABCT4321P1Z9": "Haldiram Snacks Pvt Ltd (Delhi)",
+    "27AAACT2727Q1Z5": "Tata Consumer Products (Maharashtra)",
+    "06AAACZ7003F1Z9": "Zomato Ltd (Haryana)",
+    "29AAACS6351S1Z4": "Swiggy Bundl Technologies (Karnataka)",
+    "27AABCA1418G1ZP": "Avenue Supermarts Ltd DMart",
+    "07AAACL6884F1ZT": "BigBasket Supermarket Grocery Supplies",
+    "29AABCP1344E1ZM": "PhonePe Private Ltd"
   },
   "forms": {
-    "ABCDE1234F": "Govt of India PAN Registry",
-    "123456789012": "UIDAI Aadhaar Registry",
-    "DL-1420110012345": "Vahan Parivahan DL Registry",
-    "ABCDE9876Z": "Govt of India PAN Registry"
+    "ABCDE1234F": "Income Tax Dept PAN (Individual P)",
+    "ABCDE9876Z": "Income Tax Dept PAN (Individual P)",
+    "AAAPA1234A": "Income Tax Dept PAN (Individual P)",
+    "BNZPA1234K": "Income Tax Dept PAN (Individual P)",
+    "123456789012": "UIDAI Aadhaar Identification",
+    "987654321098": "UIDAI Aadhaar Identification",
+    "DL-1420110012345": "MoRTH Parivahan Driving License"
   }
 }

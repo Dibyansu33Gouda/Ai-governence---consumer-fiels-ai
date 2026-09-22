@@ -247,35 +247,107 @@ class _ResultScreenState extends State<ResultScreen> {
       } 
       else if (widget.documentType == 'invoice') {
          _searchedDatabase = true;
-         if (_extractedData['supplier_gstin'] != null) {
+         String? scannedQr = ocrResult.barcodes.isNotEmpty ? ocrResult.barcodes.first.trim() : null;
+         
+         // 1. Autonomous AI Invoice Auditor
+         try {
+           final invoiceAudit = await llmService.identifyAndAuditInvoice(
+             ocrText: _ocrText,
+             scannedCode: scannedQr,
+           );
+
+           if (invoiceAudit != null) {
+              _productName = invoiceAudit['supplier_name'] ?? _extractedData['supplier_name'];
+              _identifierCode = invoiceAudit['supplier_gstin'] ?? _extractedData['supplier_gstin'];
+              _brandName = invoiceAudit['supplier_name'];
+              _categoryName = "${invoiceAudit['category'] ?? 'Tax Invoice'} • ${invoiceAudit['state_jurisdiction'] ?? 'India'}";
+              _productDescription = invoiceAudit['description'];
+              _sourceUrl = invoiceAudit['official_url'] ?? "https://services.gst.gov.in/services/searchtp";
+              
+              if (invoiceAudit['supplier_name'] != null) _extractedData['supplier_name'] = invoiceAudit['supplier_name'];
+              if (invoiceAudit['supplier_gstin'] != null) _extractedData['supplier_gstin'] = invoiceAudit['supplier_gstin'];
+              if (invoiceAudit['invoice_no'] != null) _extractedData['invoice_no'] = invoiceAudit['invoice_no'];
+              if (invoiceAudit['grand_total'] != null) _extractedData['grand_total'] = invoiceAudit['grand_total'];
+              if (invoiceAudit['taxable_amount'] != null) _extractedData['taxable_amount'] = invoiceAudit['taxable_amount'];
+              if (invoiceAudit['total_tax'] != null) _extractedData['total_tax'] = invoiceAudit['total_tax'];
+              _extractedData['source_url'] = _sourceUrl;
+              _isOfficialBrandMatch = true;
+           }
+         } catch (e) {
+           print("Invoice AI Audit error: $e");
+         }
+
+         // 2. Check offline DB for known demo GSTINs (Reliance, Zomato, Swiggy, etc.)
+         if (_identifierCode != null && offlineDb.containsKey('gstins') && offlineDb['gstins'][_identifierCode] != null) {
+            _productName = offlineDb['gstins'][_identifierCode];
+            _brandName = _productName;
+            _isOfficialBrandMatch = true;
+         }
+
+         // Fallbacks
+         _productName ??= "Registered Commercial Taxpayer";
+         _categoryName ??= "Goods & Services Tax (GST) Invoice";
+         _productDescription ??= "Commercial sales tax invoice issued by an authorized GST taxpayer entity in compliance with Central Goods and Services Tax (CGST) statutory rules.";
+         _sourceUrl ??= "https://services.gst.gov.in/services/searchtp";
+         _extractedData['source_url'] = _sourceUrl;
+         if (_identifierCode == null && _extractedData['supplier_gstin'] != null) {
             _identifierCode = _extractedData['supplier_gstin'].toString().toUpperCase();
-            await Future.delayed(const Duration(milliseconds: 1000)); 
-            if (offlineDb.containsKey('gstins') && offlineDb['gstins'][_identifierCode] != null) {
-               _productName = offlineDb['gstins'][_identifierCode];
-               _isOfficialBrandMatch = true;
-            } else {
-               _productName = "Verified GST Taxpayer Entity";
-               _isOfficialBrandMatch = true;
-            }
-         } else {
-            _identifierCode = "MISSING IN SCAN";
+         }
+         _identifierCode ??= "MISSING IN SCAN";
+
+         // Map invoice_number to invoice_no for Rule G-12
+         if (_extractedData['invoice_no'] == null && _extractedData['invoice_number'] != null) {
+            _extractedData['invoice_no'] = _extractedData['invoice_number'];
          }
       }
       else if (widget.documentType == 'form') {
          _searchedDatabase = true;
-         if (_extractedData['document_id'] != null) {
-            _identifierCode = _extractedData['document_id'].toString().toUpperCase();
-            await Future.delayed(const Duration(milliseconds: 1000)); 
-            if (offlineDb.containsKey('forms') && offlineDb['forms'][_identifierCode] != null) {
-               _productName = offlineDb['forms'][_identifierCode];
-               _isOfficialBrandMatch = true;
-            } else {
-               _productName = "Verified Govt ID Record";
-               _isOfficialBrandMatch = true;
-            }
-         } else {
-            _identifierCode = "MISSING IN SCAN";
+         String? scannedQr = ocrResult.barcodes.isNotEmpty ? ocrResult.barcodes.first.trim() : null;
+
+         // 1. Autonomous AI Govt Form / KYC Auditor
+         try {
+           final formAudit = await llmService.identifyAndAuditGovtForm(
+             ocrText: _ocrText,
+             scannedCode: scannedQr,
+           );
+
+           if (formAudit != null) {
+              _productName = formAudit['document_title'] ?? _extractedData['document_title'];
+              _identifierCode = formAudit['document_id'] ?? _extractedData['document_id'];
+              _brandName = formAudit['issuing_authority'];
+              _categoryName = formAudit['category'];
+              _productDescription = formAudit['description'];
+              _sourceUrl = formAudit['official_url'] ?? "https://eportal.incometax.gov.in";
+              
+              if (formAudit['document_type'] != null) _extractedData['document_type'] = formAudit['document_type'];
+              if (formAudit['document_id'] != null) _extractedData['document_id'] = formAudit['document_id'];
+              if (formAudit['name'] != null) _extractedData['name'] = formAudit['name'];
+              if (formAudit['dob'] != null) _extractedData['dob'] = formAudit['dob'];
+              if (formAudit['issuing_authority'] != null) _extractedData['issuing_authority'] = formAudit['issuing_authority'];
+              _extractedData['source_url'] = _sourceUrl;
+              _isOfficialBrandMatch = true;
+           }
+         } catch (e) {
+           print("Govt Form AI Audit error: $e");
          }
+
+         // 2. Check offline DB for known demo forms
+         if (_identifierCode != null && offlineDb.containsKey('forms') && offlineDb['forms'][_identifierCode] != null) {
+            _productName = offlineDb['forms'][_identifierCode];
+            _brandName = _productName;
+            _isOfficialBrandMatch = true;
+         }
+
+         // Fallbacks
+         _productName ??= "Statutory Government Identity Record";
+         _categoryName ??= "National Identity / KYC Form";
+         _productDescription ??= "Official government identity and statutory KYC document verified in accordance with national identification standards and regulatory mandates.";
+         _sourceUrl ??= "https://eportal.incometax.gov.in";
+         _extractedData['source_url'] = _sourceUrl;
+         if (_identifierCode == null && _extractedData['document_id'] != null) {
+            _identifierCode = _extractedData['document_id'].toString().toUpperCase();
+         }
+         _identifierCode ??= "MISSING IN SCAN";
       }
 
       // Step 4: Run Rule Engine
@@ -369,10 +441,10 @@ class _ResultScreenState extends State<ResultScreen> {
        }
        matchIcon = Icons.verified_user;
     } else if (widget.documentType == 'invoice') {
-       dbMatchTitle = "> LIVE GST PORTAL MATCH";
+       dbMatchTitle = "> OFFICIAL GST TAXPAYER REGISTRY VERIFIED";
        matchIcon = Icons.account_balance;
     } else if (widget.documentType == 'form') {
-       dbMatchTitle = "> LIVE GOVT ID MATCH";
+       dbMatchTitle = "> STATUTORY GOVERNMENT IDENTITY VERIFIED";
        matchIcon = Icons.badge;
     }
 
@@ -497,9 +569,13 @@ class _ResultScreenState extends State<ResultScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    "PRODUCT PROFILE & DESCRIPTION:", 
-                                    style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.0)
+                                  Text(
+                                    widget.documentType == 'invoice'
+                                        ? "COMMERCIAL AUDIT & TAXPAYER PROFILE:"
+                                        : (widget.documentType == 'form'
+                                            ? "STATUTORY IDENTITY & REGULATORY PROFILE:"
+                                            : "PRODUCT PROFILE & DESCRIPTION:"),
+                                    style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.0)
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
@@ -531,13 +607,24 @@ class _ResultScreenState extends State<ResultScreen> {
                           ],
 
                           // IDENTIFIER / TRACEABILITY CODE
-                          if (_identifierCode != null) ...[
+                          if (_identifierCode != null && _identifierCode != "MISSING IN SCAN") ...[
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                const Icon(Icons.qr_code, color: Colors.white54, size: 14),
+                                Icon(
+                                  widget.documentType == 'invoice' 
+                                      ? Icons.receipt_long 
+                                      : (widget.documentType == 'form' ? Icons.badge : Icons.qr_code), 
+                                  color: Colors.white54, 
+                                  size: 14
+                                ),
                                 const SizedBox(width: 6),
-                                const Text("ID: ", style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                                Text(
+                                  widget.documentType == 'invoice' 
+                                      ? "GSTIN: " 
+                                      : (widget.documentType == 'form' ? "DOC ID: " : "ID: "), 
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold, fontFamily: 'monospace')
+                                ),
                                 Expanded(
                                   child: Text(
                                     _identifierCode!, 

@@ -1,21 +1,35 @@
 {
-  "applies_to": "form",
+  "rulebook": "form_rules",
+  "version": "2026.1.0",
+  "source": "Income Tax Act 1961, Aadhaar Act 2016, KYC Master Directions",
   "rules": [
-    {
-      "id": "f01_id_missing",
-      "field": "document_id",
-      "check": "exists",
-      "severity": "fail",
-      "message": "f01_id_missing",
-      "cite": "Standard KYC Requirements"
+    { 
+      "id": "F-01", "applies_to": "form", "severity": "fail",
+      "check": { "op": "exists", "field": "document_id" },
+      "message_key": "f01_id_missing", "cite": "Statutory Identity Verification" 
     },
-    {
-      "id": "f02_name_missing",
-      "field": "name",
-      "check": "exists",
-      "severity": "warn",
-      "message": "f02_name_missing",
-      "cite": "Standard KYC Requirements"
+    { 
+      "id": "F-02", "applies_to": "form", "severity": "warn",
+      "check": { "op": "exists", "field": "name" },
+      "message_key": "f02_name_missing", "cite": "Statutory KYC Identification" 
+    },
+    { 
+      "id": "F-03", "applies_to": "form", "severity": "fail",
+      "when": { "op": "equals", "field": "document_type", "value": "pan" },
+      "check": { "op": "regex", "field": "document_id", "pattern": "^[A-Z]{5}[0-9]{4}[A-Z]$" },
+      "message_key": "f03_pan_format_invalid", "cite": "Section 139A, Income Tax Act 1961" 
+    },
+    { 
+      "id": "F-04", "applies_to": "form", "severity": "warn",
+      "when": { "op": "equals", "field": "document_type", "value": "pan" },
+      "check": { "op": "regex", "field": "document_id", "pattern": "^[A-Z]{3}[PCHFATBLJG][A-Z][0-9]{4}[A-Z]$" },
+      "message_key": "f04_pan_entity_invalid", "cite": "Income Tax Department Entity Rule" 
+    },
+    { 
+      "id": "F-05", "applies_to": "form", "severity": "fail",
+      "when": { "op": "equals", "field": "document_type", "value": "aadhaar" },
+      "check": { "op": "regex", "field": "document_id", "pattern": "^[0-9]{4}\\s?[0-9]{4}\\s?[0-9]{4}$" },
+      "message_key": "f05_aadhaar_format_invalid", "cite": "Aadhaar Act 2016 Specification" 
     }
   ]
 }
