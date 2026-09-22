@@ -176,6 +176,42 @@ class RuleEngine {
         rule = "CGST Rules 2017, Rule 46(b): Mandatory consecutive serial number unique for a financial year.";
         explanation = didPass ? "Invoice traceability established." : "Missing invoice number impairs audit trail and Input Tax Credit (ITC) eligibility.";
         break;
+      case 'P-05':
+        name = "Mandatory MRP Declaration";
+        evidence = doc['mrp'] != null ? "Declared MRP: '${doc['mrp']}'" : "Statutory Maximum Retail Price absent on packaging";
+        rule = "LMPC Rules 2011, Rule 6(1)(e): Maximum Retail Price inclusive of all taxes must be printed.";
+        explanation = didPass ? "Statutory MRP detected." : "Missing mandatory MRP declaration denies consumer price transparency and violates LMPC rules.";
+        break;
+      case 'P-10':
+        name = "Barcode Checksum (EAN-13/UPC)";
+        evidence = "Scanned Barcode: '${doc['barcode'] ?? 'N/A'}'";
+        rule = "GS1 Global Specifications & ISO/IEC 15420: Check digit must satisfy standard modulo-10 algorithm.";
+        explanation = didPass ? "Barcode checksum calculates successfully." : "Barcode checksum failed. High risk of counterfeit, damaged, or misprinted code.";
+        break;
+      case 'P-10b':
+        name = "GS1 India Country Prefix (890)";
+        evidence = "Barcode Prefix: '${(doc['barcode']?.toString() ?? '').length >= 3 ? (doc['barcode'].toString().substring(0, 3)) : 'N/A'}'";
+        rule = "GS1 India Standards: Products registered in India carry the 890 country prefix.";
+        explanation = didPass ? "Barcode carries verified GS1 India 890 prefix." : "Barcode uses an international or non-890 prefix. Verify origin for domestic Indian trade.";
+        break;
+      case 'P-09a':
+        name = "Product Expiry / Shelf Life";
+        evidence = doc['expiry_date'] != null ? "Expiry: '${doc['expiry_date']}'" : "Printed expiry date";
+        rule = "FSSAI & LMPC Rules: Sale of expired or past-best-before commodities is prohibited.";
+        explanation = didPass ? "Product is within legal shelf life." : "Product has passed its printed expiry date. Unlawful for sale under Section 59 of FSS Act.";
+        break;
+      case 'P-11':
+        name = "FSSAI 14-Digit License Registration";
+        evidence = doc['fssai_number'] != null ? "FSSAI License: '${doc['fssai_number']}'" : "No 14-digit FSSAI license detected on food product";
+        rule = "Food Safety and Standards (Packaging and Labelling) Regulations 2026.";
+        explanation = didPass ? "FSSAI 14-digit license structure validated." : "Food commodity lacks verifiable statutory FSSAI license number.";
+        break;
+      case 'P-14':
+        name = "BIS Hallmark Unique ID (HUID)";
+        evidence = doc['huid_code'] != null ? "HUID: '${doc['huid_code']}'" : "No 6-character HUID detected";
+        rule = "Bureau of Indian Standards (Hallmarking) Regulations 2026.";
+        explanation = didPass ? "6-character alphanumeric hallmark identifier verified." : "Jewellery item lacks mandatory BIS HUID hallmark.";
+        break;
       default:
         evidence = doc.entries.take(3).map((e) => "${e.key}: ${e.value}").join(", ");
         rule = cite;
@@ -323,19 +359,21 @@ RiskAssessment assessDocumentRisk({
       criticalIssues: criticalIssues,
     );
   } else if (docType == 'product') {
-    // Packaged goods LMPC checklist
+    // Packaged goods LMPC & Barcode checklist
     checklist['Manufacturer Details'] = !findings.any((f) => (f.ruleId == 'L-01' || f.ruleId == 'L-07') && !f.passed);
     checklist['Net Quantity Metric'] = !findings.any((f) => f.ruleId == 'L-02' && !f.passed);
-    checklist['MRP Inclusive of Tax'] = !findings.any((f) => f.ruleId == 'L-03' && !f.passed);
-    checklist['Mfg / Expiry Date'] = !findings.any((f) => f.ruleId == 'L-04' && !f.passed);
+    checklist['MRP Inclusive of Tax'] = !findings.any((f) => (f.ruleId == 'L-03' || f.ruleId == 'P-05') && !f.passed);
+    checklist['Mfg / Expiry Date'] = !findings.any((f) => (f.ruleId == 'L-04' || f.ruleId == 'P-09a') && !f.passed);
     checklist['Customer Care Contact'] = !findings.any((f) => f.ruleId == 'L-05' && !f.passed);
+    checklist['Barcode & Checksum'] = !findings.any((f) => f.ruleId == 'P-10' && !f.passed);
+    checklist['GS1 Prefix (890)'] = findings.any((f) => f.ruleId == 'P-10b' && f.passed);
 
     String reason = "";
     if (score == 0) {
-      reason = "All 5 mandatory declarations under Legal Metrology (Packaged Commodities) Rules 2011 verified. Product packaging is compliant.";
+      reason = "All mandatory declarations under Legal Metrology Rules and GS1 standards verified. Product packaging is compliant.";
     } else {
       final missing = checklist.entries.where((e) => !e.value).map((e) => e.key).toList();
-      reason = "Missing mandatory statutory declarations: ${missing.join(', ')}. Violates Section 36 of Legal Metrology Act (penalties up to ₹1,00,000).";
+      reason = "Statutory review required: ${missing.join(', ')}. ${criticalIssues.isNotEmpty ? 'Critical issues: ${criticalIssues.join(', ')}' : ''}";
     }
 
     score = score.clamp(0, 100);
@@ -387,3 +425,140 @@ double? _extractAmount(dynamic val) {
   final str = val.toString().replaceAll(RegExp(r'[^0-9.]'), '');
   return double.tryParse(str);
 }
+
+/// Structured result of deterministic product verification
+class ProductVerificationResult {
+  final String verdict; // "VERIFIED", "REVIEW REQUIRED", "UNABLE TO VERIFY"
+  final String reason;
+  final bool barcodeFormatValid;
+  final bool checksumValid;
+  final bool gs1IndiaValid;
+  final Map<String, String> itemChecks;
+  final String disclaimer;
+
+  ProductVerificationResult({
+    required this.verdict,
+    required this.reason,
+    required this.barcodeFormatValid,
+    required this.checksumValid,
+    required this.gs1IndiaValid,
+    required this.itemChecks,
+    required this.disclaimer,
+  });
+}
+
+/// Evaluates statutory rules and format checksums to generate explainable product verification
+ProductVerificationResult verifyProduct({
+  required List<Finding> findings,
+  required Map<String, dynamic> doc,
+  required String? barcode,
+  required bool isBarcodeFormatValid,
+  required bool isChecksumValid,
+  required bool isGs1India,
+}) {
+  final itemChecks = <String, String>{};
+
+  // 1. Barcode format
+  if (barcode == null || barcode.trim().isEmpty) {
+    itemChecks['Barcode format'] = "Missing in Scan";
+  } else if (isBarcodeFormatValid) {
+    itemChecks['Barcode format'] = "✓ Valid";
+  } else {
+    itemChecks['Barcode format'] = "❌ Invalid Format";
+  }
+
+  // 2. EAN-13 checksum
+  if (barcode == null || barcode.trim().isEmpty) {
+    itemChecks['EAN-13 checksum'] = "Unavailable";
+  } else if (isChecksumValid) {
+    itemChecks['EAN-13 checksum'] = "✓ Valid";
+  } else {
+    itemChecks['EAN-13 checksum'] = "❌ Checksum Failed";
+  }
+
+  // 3. GS1 prefix
+  if (isGs1India) {
+    itemChecks['GS1 prefix'] = "✓ India (890)";
+  } else if (barcode != null && barcode.length >= 3 && RegExp(r'^\d+$').hasMatch(barcode)) {
+    itemChecks['GS1 prefix'] = "ℹ Global GS1 (${barcode.substring(0, 3)})";
+  } else {
+    itemChecks['GS1 prefix'] = "ℹ Non-GS1 / Digital Link";
+  }
+
+  // 4. Regulatory checks
+  final failedRules = findings.where((f) => !f.passed).toList();
+  final fssaiFinding = findings.firstWhere(
+    (f) => f.ruleId == 'P-11' || f.ruleId == 'L-06',
+    orElse: () => Finding('', Severity.info, '', '', '', {}),
+  );
+  final bool isFood = doc['is_food'] == true ||
+      doc['category']?.toString().toLowerCase().contains('food') == true ||
+      doc['category']?.toString().toLowerCase().contains('dairy') == true;
+
+  if (isFood) {
+    if (fssaiFinding.ruleId.isNotEmpty && !fssaiFinding.passed) {
+      itemChecks['FSSAI License'] = "⚠ Missing on Food Pack";
+    } else if (doc['fssai_number'] != null && doc['fssai_number'].toString().isNotEmpty) {
+      itemChecks['FSSAI License'] = "✓ Valid 14-digit (${doc['fssai_number']})";
+    } else {
+      itemChecks['FSSAI License'] = "⚠ Missing / Review";
+    }
+  }
+
+  final mrpFinding = findings.firstWhere(
+    (f) => f.ruleId == 'P-05' || f.ruleId == 'L-03',
+    orElse: () => Finding('', Severity.info, '', '', '', {}),
+  );
+  if (mrpFinding.ruleId.isNotEmpty && !mrpFinding.passed) {
+    itemChecks['MRP Declaration'] = "⚠ Missing on Pack";
+  } else if (doc['mrp'] != null) {
+    itemChecks['MRP Declaration'] = "✓ Declared (${doc['mrp']})";
+  }
+
+  final expiryFinding = findings.firstWhere(
+    (f) => f.ruleId == 'P-09a' || f.ruleId == 'L-04',
+    orElse: () => Finding('', Severity.info, '', '', '', {}),
+  );
+  if (expiryFinding.ruleId.isNotEmpty && !expiryFinding.passed) {
+    itemChecks['Expiry / Shelf Life'] = "❌ Expired / Prohibited";
+  } else if (doc['expiry_date'] != null) {
+    itemChecks['Expiry / Shelf Life'] = "✓ Valid (${doc['expiry_date']})";
+  }
+
+  // Determine Verdict: "Verified / Review Required / Unable to Verify"
+  String verdict;
+  String reason;
+
+  if (barcode == null || barcode.trim().isEmpty || !isBarcodeFormatValid) {
+    verdict = "UNABLE TO VERIFY";
+    reason = "Barcode could not be read or does not follow standard packaging barcode syntax. Recapture with clear lighting.";
+  } else if (!isChecksumValid) {
+    verdict = "REVIEW REQUIRED";
+    reason = "Barcode fails EAN-13 modulo-10 checksum validation. Check digit does not match encoded sequence.";
+  } else if (failedRules.any((f) => f.severity == Severity.fail)) {
+    verdict = "REVIEW REQUIRED";
+    final critical = failedRules.where((f) => f.severity == Severity.fail).map((f) => f.findingName).join(", ");
+    reason = "Statutory violation detected: $critical.";
+  } else if (failedRules.any((f) => f.severity == Severity.warn)) {
+    verdict = "REVIEW REQUIRED";
+    final warnings = failedRules.where((f) => f.severity == Severity.warn).map((f) => f.findingName).join(", ");
+    reason = "Advisory review required: $warnings.";
+  } else {
+    verdict = "VERIFIED";
+    reason = "Barcode format, checksum, and applicable statutory declarations conform to Legal Metrology and GS1 standards.";
+  }
+
+  const disclaimer =
+      "A valid barcode only proves that the barcode passes applicable format and checksum checks. It does not certify physical product authenticity or supply-chain provenance without tamper-evident verification.";
+
+  return ProductVerificationResult(
+    verdict: verdict,
+    reason: reason,
+    barcodeFormatValid: isBarcodeFormatValid,
+    checksumValid: isChecksumValid,
+    gs1IndiaValid: isGs1India,
+    itemChecks: itemChecks,
+    disclaimer: disclaimer,
+  );
+}
+

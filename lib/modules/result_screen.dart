@@ -10,6 +10,7 @@ import '../core/llm_service.dart';
 import '../core/rule_engine.dart';
 import '../core/validators.dart';
 import '../core/audit_service.dart';
+import '../core/product_lookup_service.dart';
 
 class ResultScreen extends StatefulWidget {
   final String imagePath;
@@ -42,6 +43,10 @@ class _ResultScreenState extends State<ResultScreen> {
   String? _categoryName;
   String? _sourceUrl;
   bool _isOfficialBrandMatch = false;
+
+  // Dedicated Product Verification Models
+  ProductLookupResult? _productLookupResult;
+  ProductVerificationResult? _productVerificationResult;
   
   @override
   void initState() {
@@ -99,159 +104,34 @@ class _ResultScreenState extends State<ResultScreen> {
             _identifierCode = _extractedData['barcode'].toString().trim();
          }
 
-         String? resolvedUrl;
-         // Handle QR Codes and URLs
-         if (_identifierCode != null && (_identifierCode!.startsWith('http://') || _identifierCode!.startsWith('https://'))) {
-            resolvedUrl = _identifierCode;
-            _sourceUrl = resolvedUrl;
-            _extractedData['source_url'] = resolvedUrl;
-            
-            // Follow Redirect to discover actual brand portal
-            try {
-              final client = HttpClient();
-              client.badCertificateCallback = ((X509Certificate cert, String host, int port) => true);
-              final req = await client.getUrl(Uri.parse(_identifierCode!));
-              req.followRedirects = true;
-              final res = await req.close();
-              final body = await res.transform(utf8.decoder).join();
-              if (body.contains('http-equiv = "refresh"') || body.contains('http-equiv="refresh"')) {
-                 final match = RegExp(r'''url\s*=\s*([^"'>\s]+)''', caseSensitive: false).firstMatch(body);
-                 if (match != null) {
-                    resolvedUrl = match.group(1);
-                    _sourceUrl = resolvedUrl;
-                    _extractedData['source_url'] = resolvedUrl;
-                 }
-              }
-              if (res.redirects.isNotEmpty) {
-                 resolvedUrl = res.redirects.last.location.toString();
-                 _sourceUrl = resolvedUrl;
-                 _extractedData['source_url'] = resolvedUrl;
-              }
-            } catch (e) {
-              print("Redirect resolution error: $e");
-            }
+         // Step 1: Perform separated Online Product Lookup (OpenFoodFacts / OpenBeautyFacts / UPCItemDB / Offline DB)
+         if (_identifierCode != null && _identifierCode!.isNotEmpty) {
+           _productLookupResult = await ProductLookupService().lookup(
+             _identifierCode!,
+             offlineDb: offlineDb,
+           );
+
+           if (_productLookupResult!.hasProductInfo) {
+             _productName = _productLookupResult!.productName;
+             _brandName = _productLookupResult!.brand;
+             _categoryName = _productLookupResult!.category;
+             _productDescription = _productLookupResult!.description;
+             _productImageUrl = _productLookupResult!.imageUrl;
+             _sourceUrl = _productLookupResult!.sourceUrl;
+             _isOfficialBrandMatch = true;
+
+             if (_brandName != null) _extractedData['brand'] = _brandName;
+             if (_categoryName != null) _extractedData['category'] = _categoryName;
+             if (_sourceUrl != null) _extractedData['source_url'] = _sourceUrl;
+             if (_productLookupResult!.manufacturer != null) {
+               _extractedData['manufacturer'] = _productLookupResult!.manufacturer;
+             }
+           } else {
+             // Strict Zero Hallucination: Never invent or hallucinate missing product info
+             _productName = null;
+             _productDescription = null;
+           }
          }
-
-         // Check offline DB exact match first
-         if (_identifierCode != null && offlineDb.containsKey('products') && offlineDb['products'][_identifierCode] != null) {
-            _productName = offlineDb['products'][_identifierCode];
-            _isOfficialBrandMatch = true;
-         }
-
-         // 5-Domain Cascade for numeric barcodes
-         if (_productName == null && _identifierCode != null && RegExp(r'^\d+$').hasMatch(_identifierCode!)) {
-            List<String> openFactsDomains = [
-              'world.openfoodfacts.org',
-              'world.openbeautyfacts.org',
-              'world.openproductsfacts.org',
-              'world.openpetfoodfacts.org',
-            ];
-            
-            for (String domain in openFactsDomains) {
-              try {
-                final url = Uri.parse('https://$domain/api/v0/product/$_identifierCode.json');
-                final client = HttpClient();
-                final request = await client.getUrl(url).timeout(const Duration(seconds: 4));
-                final response = await request.close();
-                if (response.statusCode == 200) {
-                  final responseBody = await response.transform(utf8.decoder).join();
-                  final json = jsonDecode(responseBody);
-                  if (json['status'] == 1 && json['product'] != null) {
-                    final product = json['product'];
-                    _productName = product['product_name'] ?? product['product_name_en'] ?? product['generic_name'];
-                    _brandName = product['brands'] ?? product['brand'];
-                    _productImageUrl = product['image_front_small_url'] ?? product['image_front_url'];
-                    _sourceUrl = 'https://$domain/product/$_identifierCode';
-                    _extractedData['source_url'] = _sourceUrl;
-                    _isOfficialBrandMatch = true;
-                    break;
-                  }
-                }
-              } catch (e) {
-                print("OpenFacts ($domain) lookup: $e");
-              }
-            }
-
-            // UPCItemDB fallback
-            if (_productName == null) {
-              try {
-                final url2 = Uri.parse('https://api.upcitemdb.com/prod/trial/lookup?upc=$_identifierCode');
-                final request2 = await HttpClient().getUrl(url2).timeout(const Duration(seconds: 4));
-                final response2 = await request2.close();
-                if (response2.statusCode == 200) {
-                  final responseBody2 = await response2.transform(utf8.decoder).join();
-                  final json2 = jsonDecode(responseBody2);
-                  if (json2['code'] == 'OK' && (json2['items'] as List).isNotEmpty) {
-                    final product = json2['items'][0];
-                    _productName = product['title'];
-                    _brandName = product['brand'];
-                    if ((product['images'] as List).isNotEmpty) {
-                      _productImageUrl = product['images'][0];
-                    }
-                    _sourceUrl = 'https://www.upcitemdb.com/upc/$_identifierCode';
-                    _extractedData['source_url'] = _sourceUrl;
-                    _isOfficialBrandMatch = true;
-                  }
-                }
-              } catch (e) {
-                print("UPCItemDB lookup: $e");
-              }
-            }
-         }
-
-         // Step 3: AUTONOMOUS AI PRODUCT IDENTIFICATION & DESCRIPTION (THE CORE FIX)
-         // If database didn't find the product or it was a QR code, LLM analyzes packaging OCR + code!
-         if (_productName == null || _productDescription == null) {
-            try {
-              final aiProduct = await llmService.identifyAndDescribeProduct(
-                scannedCode: _identifierCode ?? 'Packaged Goods',
-                ocrText: _ocrText.isNotEmpty ? _ocrText : (_productName ?? 'Product scan'),
-                resolvedUrl: resolvedUrl,
-                knownProductName: _productName,
-                knownBrand: _brandName,
-              );
-
-              if (aiProduct != null) {
-                _productName ??= aiProduct['product_name'];
-                _productDescription ??= aiProduct['description'];
-                _brandName ??= aiProduct['brand'];
-                _categoryName ??= aiProduct['category'];
-                _sourceUrl ??= aiProduct['official_url'];
-                _extractedData['source_url'] = _sourceUrl;
-                
-                if (_brandName != null) _extractedData['brand'] = _brandName;
-                if (_categoryName != null) _extractedData['category'] = _categoryName;
-                if (_extractedData['mrp'] == null && aiProduct['mrp'] != null) _extractedData['mrp'] = aiProduct['mrp'];
-                if (_extractedData['fssai_number'] == null && aiProduct['fssai_number'] != null) _extractedData['fssai_number'] = aiProduct['fssai_number'];
-                _isOfficialBrandMatch = true;
-              }
-            } catch (e) {
-              print("AI Product Identification error: $e");
-            }
-         }
-
-         // Final Fallbacks so screen is NEVER empty
-         if (_productName == null) {
-            if (_sourceUrl != null && _sourceUrl!.contains('amul.com')) {
-               _productName = "Amul Real Milk Product";
-               _brandName = "Amul (GCMMF)";
-               _categoryName = "Dairy & Ice Cream";
-               _isOfficialBrandMatch = true;
-            } else if (_ocrText.toLowerCase().contains('amul')) {
-               _productName = "Amul Real Milk Ice Cream";
-               _brandName = "Amul (GCMMF)";
-               _categoryName = "Dairy & Ice Cream";
-               _sourceUrl = "https://amul.com";
-               _extractedData['source_url'] = _sourceUrl;
-               _isOfficialBrandMatch = true;
-            } else {
-               _productName = "Verified Consumer Product";
-               _brandName = "Authorized Manufacturer";
-               _categoryName = "Consumer Packaged Goods";
-            }
-         }
-
-         _productDescription ??= "Authentic consumer product verified through legal packaging compliance, digital traceability, and statutory labeling standards.";
       } 
       else if (widget.documentType == 'invoice') {
          _searchedDatabase = true;
@@ -393,17 +273,37 @@ class _ResultScreenState extends State<ResultScreen> {
         ocrText: _ocrText,
       );
 
-      final failedFindings = _findings.where((f) => !f.passed).toList();
-      bool hasValidExtraction = _extractedData.keys.where((k) => k != 'timestamp' && _extractedData[k] != null && _extractedData[k].toString().isNotEmpty).isNotEmpty;
+      if (widget.documentType == 'product') {
+        final lookup = _productLookupResult;
+        _productVerificationResult = verifyProduct(
+          findings: _findings,
+          doc: _extractedData,
+          barcode: _identifierCode,
+          isBarcodeFormatValid: lookup?.isBarcodeFormatValid ?? (_identifierCode != null && isValidEan13(_identifierCode!)),
+          isChecksumValid: lookup?.isChecksumValid ?? (_identifierCode != null && isValidEan13(_identifierCode!)),
+          isGs1India: lookup?.isGs1India ?? (_identifierCode != null && isGs1IndiaPrefix(_identifierCode!)),
+        );
 
-      if (_ocrText.trim().isEmpty && !hasValidExtraction && _identifierCode == null) {
-        _verdict = "CANNOT_READ";
-      } else if (failedFindings.any((f) => f.severity == Severity.fail) || (_riskAssessment != null && _riskAssessment!.score >= 70)) {
-        _verdict = "CHECK_THESE";
-      } else if (failedFindings.isNotEmpty || (_riskAssessment != null && _riskAssessment!.score > 0)) {
-        _verdict = "MINOR_POINTS";
+        if (_productVerificationResult!.verdict == 'VERIFIED') {
+          _verdict = "NO_PROBLEMS";
+        } else if (_productVerificationResult!.verdict == 'UNABLE TO VERIFY') {
+          _verdict = "CANNOT_READ";
+        } else {
+          _verdict = "CHECK_THESE";
+        }
       } else {
-        _verdict = "NO_PROBLEMS";
+        final failedFindings = _findings.where((f) => !f.passed).toList();
+        bool hasValidExtraction = _extractedData.keys.where((k) => k != 'timestamp' && _extractedData[k] != null && _extractedData[k].toString().isNotEmpty).isNotEmpty;
+
+        if (_ocrText.trim().isEmpty && !hasValidExtraction && _identifierCode == null) {
+          _verdict = "CANNOT_READ";
+        } else if (failedFindings.any((f) => f.severity == Severity.fail) || (_riskAssessment != null && _riskAssessment!.score >= 70)) {
+          _verdict = "CHECK_THESE";
+        } else if (failedFindings.isNotEmpty || (_riskAssessment != null && _riskAssessment!.score > 0)) {
+          _verdict = "MINOR_POINTS";
+        } else {
+          _verdict = "NO_PROBLEMS";
+        }
       }
 
       // Automatically log verification into sovereign local audit history
@@ -413,11 +313,11 @@ class _ResultScreenState extends State<ResultScreen> {
           timestamp: DateTime.now().toIso8601String(),
           dateFormatted: DateFormat('dd MMM, HH:mm').format(DateTime.now()),
           documentType: widget.documentType,
-          title: _productName ?? (widget.documentType == 'invoice' ? 'GST Tax Invoice' : (widget.documentType == 'product' ? 'Packaged Goods Item' : 'Government KYC Form')),
+          title: _productName ?? (widget.documentType == 'invoice' ? 'GST Tax Invoice' : (widget.documentType == 'product' ? (_identifierCode != null ? 'Product #$_identifierCode' : 'Packaged Goods Item') : 'Government KYC Form')),
           riskScore: _riskAssessment!.score,
           riskLevel: _riskAssessment!.level,
-          verdict: _verdict,
-          primaryReason: _riskAssessment!.primaryReason,
+          verdict: widget.documentType == 'product' && _productVerificationResult != null ? _productVerificationResult!.verdict : _verdict,
+          primaryReason: widget.documentType == 'product' && _productVerificationResult != null ? _productVerificationResult!.reason : _riskAssessment!.primaryReason,
           checklistPassed: _riskAssessment!.checklist.entries.where((e) => e.value).map((e) => e.key).toList(),
           checklistFailed: _riskAssessment!.checklist.entries.where((e) => !e.value).map((e) => e.key).toList(),
           extractedData: _extractedData,
@@ -498,6 +398,7 @@ class _ResultScreenState extends State<ResultScreen> {
                 verdict: _verdict,
                 extractedFields: _extractedData
               );
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('EVIDENCE SAVED: ${file.path}', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
@@ -531,8 +432,10 @@ class _ResultScreenState extends State<ResultScreen> {
                   if (!_qualityGateDismissed && _ocrText.trim().length < 25 && _identifierCode == null)
                     _buildQualityGateBanner(context),
 
-                  // 1. PRODUCT PROFILE / BRAND CARD
-                  if (_searchedDatabase && _productName != null)
+                  // 1. PRODUCT FLOW (Separated Online Product Info + Certus Verification)
+                  if (widget.documentType == 'product')
+                    _buildProductModule(context)
+                  else if (_searchedDatabase && _productName != null)
                     Container(
                       margin: const EdgeInsets.only(bottom: 20),
                       padding: const EdgeInsets.all(20),
@@ -684,8 +587,9 @@ class _ResultScreenState extends State<ResultScreen> {
                   if (widget.documentType == 'form')
                     _buildGovtFormCuratedSourceCard(),
 
-                  // 4. VERDICT SUMMARY CARD
-                  Container(
+                  // 4. VERDICT SUMMARY CARD (For Invoices and Forms)
+                  if (widget.documentType != 'product')
+                    Container(
                     padding: const EdgeInsets.all(18.0),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0A0A0A),
@@ -1535,6 +1439,509 @@ class _ResultScreenState extends State<ResultScreen> {
           Expanded(child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500))),
         ],
       ),
+    );
+  }
+
+  Widget _buildProductModule(BuildContext context) {
+    final lookup = _productLookupResult;
+    final verif = _productVerificationResult;
+
+    final String sourceTitle = lookup?.sourceName ?? "Product Registry";
+    final String retrievedTime = DateFormat('dd MMM yyyy, HH:mm').format(lookup?.retrievedAt ?? DateTime.now());
+
+    Color verifColor = const Color(0xFF00FF66);
+    IconData verifIcon = Icons.verified;
+    if (verif != null) {
+      if (verif.verdict == 'REVIEW REQUIRED') {
+        verifColor = const Color(0xFFFFD600);
+        verifIcon = Icons.warning_amber_rounded;
+      } else if (verif.verdict == 'UNABLE TO VERIFY') {
+        verifColor = const Color(0xFFFF3333);
+        verifIcon = Icons.error_outline;
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. ONLINE / OFFLINE TRANSPARENCY CARD (Requirement 5)
+        Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141414),
+            border: Border.all(
+              color: lookup != null && lookup.status == ProductLookupStatus.networkUnavailable
+                  ? const Color(0xFFFFD600)
+                  : Colors.white24,
+            ),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                lookup != null && lookup.isOnline ? Icons.public : Icons.wifi_off,
+                size: 16,
+                color: lookup != null && lookup.isOnline ? const Color(0xFF00FF66) : const Color(0xFFFFD600),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  lookup != null && lookup.status == ProductLookupStatus.networkUnavailable
+                      ? "Online product information is unavailable. Offline barcode verification is still available."
+                      : (lookup != null && lookup.isOnline
+                          ? "🌐 Product information retrieved online   •   🔒 Verification performed locally"
+                          : "📴 Offline product registry matched   •   🔒 Verification performed locally"),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.bold,
+                    color: lookup != null && lookup.status == ProductLookupStatus.networkUnavailable
+                        ? const Color(0xFFFFD600)
+                        : Colors.white70,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 2. 📦 PRODUCT INFORMATION CARD (Requirement 2 & 4)
+        Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141414),
+            border: Border.all(color: Colors.white24, width: 1.5),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.inventory_2, color: Color(0xFFFFD600), size: 18),
+                  const SizedBox(width: 8),
+                  const Text(
+                    "📦 PRODUCT INFORMATION",
+                    style: TextStyle(
+                      color: Color(0xFFFFD600),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                  const Spacer(),
+                  if (lookup != null && lookup.hasProductInfo)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00FF66).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: const Color(0xFF00FF66), width: 1),
+                      ),
+                      child: const Text(
+                        "ONLINE MATCH",
+                        style: TextStyle(color: Color(0xFF00FF66), fontSize: 9, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              if (lookup != null && lookup.hasProductInfo) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (lookup.imageUrl != null) ...[
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.white24),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: Image.network(
+                            lookup.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => const Center(
+                              child: Icon(Icons.inventory_2, size: 40, color: Colors.white24),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            lookup.productName ?? "Packaged Product",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              height: 1.15,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          if (lookup.brand != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  const Text("Brand: ", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  Expanded(
+                                    child: Text(
+                                      lookup.brand!,
+                                      style: const TextStyle(color: Color(0xFFFFD600), fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (lookup.category != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Row(
+                                children: [
+                                  const Text("Category: ", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  Expanded(
+                                    child: Text(
+                                      lookup.category!,
+                                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          Row(
+                            children: [
+                              const Text("Barcode: ", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+                              Expanded(
+                                child: Text(
+                                  "${lookup.barcode} (${lookup.barcodeType})",
+                                  style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (lookup.manufacturer != null) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text("Manufacturer: ", style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold)),
+                                Expanded(
+                                  child: Text(
+                                    lookup.manufacturer!,
+                                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Description Box (Actual description retrieved from database - never hallucinated)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0A0A),
+                    border: const Border(left: BorderSide(color: Color(0xFFFFD600), width: 3)),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "DESCRIPTION",
+                        style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.0),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        lookup.description != null && lookup.description!.isNotEmpty
+                            ? lookup.description!
+                            : "Product description not provided by the online product source.",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.45, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                // When Product is NOT found online (Strict Zero-Hallucination)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0A0A),
+                    border: Border.all(color: Colors.white24),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.search_off, color: Color(0xFFFFD600), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              lookup?.statusMessage ?? "Product information could not be found for this barcode.",
+                              style: const TextStyle(color: Color(0xFFFFD600), fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "Scanned Code: ${_identifierCode ?? 'None'}",
+                        style: const TextStyle(color: Colors.white70, fontFamily: 'monospace', fontSize: 12),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "This barcode was not found in open global product registries (Open Food Facts, UPCItemDB). Physical packaging declarations and barcode checksum are verified below.",
+                        style: TextStyle(color: Colors.white38, fontSize: 11, height: 1.4),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // 3. 🔐 CERTUS VERIFICATION CARD (Requirement 3 & 4)
+        Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141414),
+            border: Border.all(color: verifColor, width: 1.5),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.gavel, color: verifColor, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    "🔐 CERTUS STATUTORY VERIFICATION",
+                    style: TextStyle(
+                      color: verifColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Itemized Checks
+              if (verif != null) ...[
+                ...verif.itemChecks.entries.map((check) {
+                  final bool isOk = check.value.startsWith('✓');
+                  final bool isWarn = check.value.startsWith('⚠');
+                  final Color c = isOk ? const Color(0xFF00FF66) : (isWarn ? const Color(0xFFFFD600) : const Color(0xFFFF3333));
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isOk ? "✓ " : (isWarn ? "⚠ " : "❌ "),
+                          style: TextStyle(color: c, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        Text(
+                          "${check.key}: ",
+                          style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        Expanded(
+                          child: Text(
+                            check.value.replaceFirst(RegExp(r'^[✓⚠❌]\s*'), ''),
+                            style: TextStyle(color: c, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 12),
+
+                // Verdict Banner
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0A0A),
+                    border: Border.all(color: verifColor, width: 2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(verifIcon, color: verifColor, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "RESULT: ${verif.verdict}",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: verifColor,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Reason Box
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0A0A),
+                    border: Border(left: BorderSide(color: verifColor, width: 3)),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "REASON:",
+                        style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.0),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        verif.reason,
+                        style: const TextStyle(color: Colors.white, fontSize: 12, height: 1.4, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Explicit Legal Distinction Note (Requirement 3 & 4)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    border: Border.all(color: Colors.white12),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.white38, size: 14),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          verif.disclaimer,
+                          style: const TextStyle(color: Colors.white38, fontSize: 10.5, height: 1.35, fontStyle: FontStyle.italic),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // 4. 🌐 SOURCE CARD (Requirement 4)
+        Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF141414),
+            border: Border.all(color: Colors.white24),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.public, color: Color(0xFF00FF66), size: 16),
+                  SizedBox(width: 8),
+                  Text(
+                    "🌐 SOURCE & REGISTRY PROVENANCE",
+                    style: TextStyle(
+                      color: Color(0xFF00FF66),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.0,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Text("Product information source: ", style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Expanded(
+                    child: Text(
+                      sourceTitle,
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Text("Last retrieved: ", style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text(retrievedTime, style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace')),
+                ],
+              ),
+              if (lookup?.sourceUrl != null && lookup!.sourceUrl!.startsWith('http')) ...[
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Text("Source link: ", style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text(
+                        lookup.sourceUrl!,
+                        style: const TextStyle(color: Color(0xFF00FF66), fontSize: 10.5, fontFamily: 'monospace'),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: lookup.sourceUrl!));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Source URL copied to clipboard"), duration: Duration(seconds: 1)),
+                        );
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.only(left: 6),
+                        child: Icon(Icons.copy, color: Color(0xFF00FF66), size: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
