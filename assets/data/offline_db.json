@@ -1,5 +1,12 @@
 {
   "products": {
+    "https://qr1.be/Q9FW": "Amul Real Milk Ice Cream",
+    "8901262010126": "Amul Real Milk Ice Cream (Vanilla Magic)",
+    "8901262010041": "Amul Pure Butter",
+    "8901262010058": "Amul Kool Flavoured Milk",
+    "8901262080006": "Amul Gold Full Cream Milk",
+    "8901262080020": "Amul Taaza Toned Milk",
+    "8901262010102": "Amul Processed Cheese Slices",
     "8901058863870": "Maggi 2-Minute Noodles",
     "8901764012273": "Parle-G Gold Biscuits",
     "89015887": "Sprite Soft Drink",
@@ -7,17 +14,16 @@
     "8901030911031": "Horlicks Classic Malt",
     "8901030911116": "Horlicks Chocolate",
     "8901030911000": "Horlicks Health Drink",
-    "8901491101514": "Lays Classic Salted",
-    "8901262010041": "Amul Butter",
-    "8902519002237": "Dabur Honey",
-    "8901207040409": "Tata Salt",
-    "8904000900388": "Britannia Good Day",
-    "8901058000000": "Nestle KitKat",
-    "8901764692017": "Carbonated Water (Sprite/Kinley)",
-    "8901396354604": "Unregistered Beverage",
-    "8904006307656": "Premium Perfume (User Demo)",
-    "8901088200066": "Livon Hair Serum (Anti-Frizz)",
-    "8901248226189": "Mentho Plus Balm"
+    "8901491101514": "Lays Classic Salted Chips",
+    "8902519002237": "Dabur 100% Pure Honey",
+    "8901207040409": "Tata Salt Vacuum Evaporated",
+    "8904000900388": "Britannia Good Day Butter Cookies",
+    "8901058000000": "Nestle KitKat Crisp Wafer",
+    "8901764692017": "Kinley Packaged Drinking Water",
+    "8901396354604": "Unregistered Local Beverage",
+    "8904006307656": "Wild Stone Code Titanium Perfume",
+    "8901088200066": "Livon Hair Serum (Anti-Frizz Micro-Nutrients)",
+    "8901248226189": "Emami Mentho Plus Balm (Headache Relief)"
   },
   "gstins": {
     "27AADCB2230M1Z2": "Reliance Retail Ltd",
@@ -35,5 +41,3 @@
     "ABCDE9876Z": "Govt of India PAN Registry"
   }
 }
-
-

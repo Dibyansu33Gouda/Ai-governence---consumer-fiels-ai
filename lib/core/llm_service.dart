@@ -42,7 +42,7 @@ class CertusLlmService {
     
     final prompt = '''
 Instruction: $instruction
-Output purely a JSON object without markdown formatting. Do not wrap in `json.
+Output purely a valid JSON object without markdown formatting, preamble, or commentary. Do not wrap in ```json.
 Document Text:
 $documentText
     ''';
@@ -51,13 +51,70 @@ $documentText
       final responseText = await _generate(prompt);
       if (responseText != null) {
         String cleaned = responseText.trim();
-        if (cleaned.startsWith("`json")) cleaned = cleaned.substring(7);
-        if (cleaned.startsWith("`")) cleaned = cleaned.substring(3);
-        if (cleaned.endsWith("`")) cleaned = cleaned.substring(0, cleaned.length - 3);
+        if (cleaned.startsWith("```json")) cleaned = cleaned.substring(7);
+        if (cleaned.startsWith("```")) cleaned = cleaned.substring(3);
+        if (cleaned.endsWith("```")) cleaned = cleaned.substring(0, cleaned.length - 3);
+        
+        // Find first { and last }
+        int start = cleaned.indexOf('{');
+        int end = cleaned.lastIndexOf('}');
+        if (start != -1 && end != -1 && end > start) {
+          cleaned = cleaned.substring(start, end + 1);
+        }
         return jsonDecode(cleaned.trim());
       }
     } catch (e) {
-      print("LLM Error: $e");
+      print("LLM extractJson Error: $e");
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> identifyAndDescribeProduct({
+    required String scannedCode,
+    required String ocrText,
+    String? resolvedUrl,
+  }) async {
+    if (isOfflineMode || _activeEngine == "NONE") return null;
+
+    final prompt = '''
+You are an expert consumer product verifier and auditor.
+Analyze the following packaging scan and scanned barcode / QR code to identify the exact product, brand, authenticity, and legal details.
+
+Scanned Code: $scannedCode
+Resolved Web Link: ${resolvedUrl ?? 'None'}
+Packaging Text Detected (OCR):
+$ocrText
+
+Return ONLY a pure JSON object (no markdown, no backticks, no preamble) with these exact keys:
+{
+  "product_name": "Full official product name including flavor/type (e.g. Amul Real Milk Vanilla Ice Cream)",
+  "brand": "Manufacturer or Brand Name (e.g. Amul / GCMMF)",
+  "category": "Specific category (e.g. Dairy & Ice Cream, Cosmetics, FMCG, Beverage)",
+  "description": "Comprehensive, highly detailed 2-3 sentence product description explaining what the product is, key quality attributes, manufacturer authenticity, and purpose.",
+  "official_url": "Real official brand website (e.g. https://amul.com)",
+  "mrp": "Extracted MRP with currency if visible in OCR or packaging text, else null",
+  "expiry_date": "Extracted expiry or best before if visible in OCR, else null",
+  "fssai_number": "Extracted 14-digit FSSAI number if food/beverage and visible in OCR, else null",
+  "is_authentic_brand": true
+}
+''';
+
+    try {
+      final responseText = await _generate(prompt);
+      if (responseText != null) {
+        String cleaned = responseText.trim();
+        if (cleaned.startsWith("```json")) cleaned = cleaned.substring(7);
+        if (cleaned.startsWith("```")) cleaned = cleaned.substring(3);
+        if (cleaned.endsWith("```")) cleaned = cleaned.substring(0, cleaned.length - 3);
+        int start = cleaned.indexOf('{');
+        int end = cleaned.lastIndexOf('}');
+        if (start != -1 && end != -1 && end > start) {
+          cleaned = cleaned.substring(start, end + 1);
+        }
+        return jsonDecode(cleaned.trim());
+      }
+    } catch (e) {
+      print("LLM identifyAndDescribeProduct Error: $e");
     }
     return null;
   }
@@ -91,28 +148,36 @@ If the user asks to translate the document, translate the entire context accurat
   
   Future<String?> _generate(String prompt) async {
     if (_activeEngine == "GEMINI") {
-      // No built-in timeout setting in current generative_ai dart package version? 
-      // We can wrap it in Future.any or timeout()
       final response = await _geminiModel!.generateContent([Content.text(prompt)]).timeout(const Duration(seconds: 20));
       return response.text;
     } else if (_activeEngine == "GROQ") {
-      final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
-      final request = await HttpClient().postUrl(url).timeout(const Duration(seconds: 20));
-      request.headers.set('Authorization', 'Bearer $_groqApiKey');
-      request.headers.set('Content-Type', 'application/json');
-      request.write(jsonEncode({
-        'model': 'llama3-8b-8192',
-        'messages': [
-          {'role': 'user', 'content': prompt}
-        ]
-      }));
-      final response = await request.close().timeout(const Duration(seconds: 20));
-      final responseBody = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(responseBody);
-      if (response.statusCode != 200) {
-        throw Exception(json['error']?['message'] ?? 'Groq API Error');
+      // Try qwen/qwen3.8-27b first, fallback to openai/gpt-oss-20b
+      List<String> modelsToTry = ['qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+      
+      for (String modelName in modelsToTry) {
+        try {
+          final url = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
+          final request = await HttpClient().postUrl(url).timeout(const Duration(seconds: 15));
+          request.headers.set('Authorization', 'Bearer $_groqApiKey');
+          request.headers.set('Content-Type', 'application/json');
+          request.write(jsonEncode({
+            'model': modelName,
+            'messages': [
+              {'role': 'user', 'content': prompt}
+            ],
+            'temperature': 0.2
+          }));
+          final response = await request.close().timeout(const Duration(seconds: 15));
+          final responseBody = await response.transform(utf8.decoder).join();
+          final json = jsonDecode(responseBody);
+          if (response.statusCode == 200 && json['choices'] != null && (json['choices'] as List).isNotEmpty) {
+            return json['choices'][0]['message']['content'];
+          }
+        } catch (e) {
+          print("Groq model $modelName failed: $e. Trying fallback...");
+        }
       }
-      return json['choices'][0]['message']['content'];
+      throw Exception("All Groq models failed.");
     }
     return null;
   }

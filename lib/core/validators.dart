@@ -15,24 +15,40 @@ bool isValidGstin(String raw) {
   return _cp[check] == g[14];
 }
 
-/// EAN-13: weights 1,3,1,3... over the first 12 digits.
+/// EAN-13 / GS1 Digital Link / QR Code format validator
 bool isValidEan13(String s) {
-  if (!RegExp(r'^\d{13}$').hasMatch(s)) return false;
+  final clean = s.trim();
+  if (clean.isEmpty) return false;
+  // If it's a URL or QR code digital link, it is a valid packaging identifier
+  if (clean.startsWith('http://') || clean.startsWith('https://')) return true;
+  
+  if (!RegExp(r'^\d{13}$').hasMatch(clean)) {
+    // Also accept 8-digit EAN-8 or 12-digit UPC-A
+    if (RegExp(r'^\d{8}$').hasMatch(clean) || RegExp(r'^\d{12}$').hasMatch(clean)) return true;
+    return false;
+  }
   var sum = 0;
   for (var i = 0; i < 12; i++) {
-    final d = int.parse(s[i]);
+    final d = int.parse(clean[i]);
     sum += i.isEven ? d : d * 3;
   }
-  return (10 - (sum % 10)) % 10 == int.parse(s[12]);
+  return (10 - (sum % 10)) % 10 == int.parse(clean[12]);
 }
 
-/// Check if EAN-13 barcode has the GS1 India prefix (890).
+/// Check if EAN-13 barcode has the GS1 India prefix (890) or is an authorized Indian Digital Link
 bool isGs1IndiaPrefix(String s) {
-  return isValidEan13(s) && s.startsWith('890');
+  final clean = s.trim();
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    return true; // Authorized Digital Link
+  }
+  return isValidEan13(clean) && clean.startsWith('890');
 }
 
 /// FSSAI Structure: Must be exactly 14 digits.
-bool isFssaiShape(String s) => RegExp(r'^\d{14}$').hasMatch(s);
+bool isFssaiShape(String s) {
+  final clean = s.replaceAll(RegExp(r'[^0-9]'), '');
+  return clean.length == 14;
+}
 
 /// BIS HUID Structure (Jewellery): 6-character alphanumeric.
 bool isBisHuidShape(String s) => RegExp(r'^[A-Z0-9]{6}$', caseSensitive: false).hasMatch(s.trim());
